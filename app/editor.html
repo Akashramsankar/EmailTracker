@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Tracker Editor Helper</title>
+  <style>
+    :root {
+      --ink: #17324d;
+      --ink-soft: #526c86;
+      --line: #d8e3ee;
+      --panel: #f4f8fc;
+      --accent: #1f6fd1;
+      --accent-soft: #eaf3ff;
+      --success: #027a48;
+      --warning: #9a6700;
+      --warning-soft: #fff6e5;
+      --surface: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: transparent;
+      color: var(--ink);
+    }
+
+    .shell {
+      display: grid;
+      gap: 10px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(244, 248, 252, 0.98));
+    }
+
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .copy {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--ink-soft);
+    }
+
+    .warning {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--warning-soft);
+      color: var(--warning);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, opacity 120ms ease;
+    }
+
+    .btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    .btn:disabled {
+      opacity: 0.65;
+      cursor: default;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+
+    .status {
+      min-height: 18px;
+      font-size: 12px;
+      color: var(--ink-soft);
+    }
+
+    .status.success {
+      color: var(--success);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topline">
+      <div class="title">Email Tracker</div>
+      <div class="pill" id="editorModePill">Native Editor Assist</div>
+    </div>
+
+    <div class="copy">
+      Insert the tracking pixel into the open Freshdesk email editor, then send the reply from Freshdesk normally.
+    </div>
+
+    <div class="warning">
+      Use this only in email reply or forward editors. Do not insert tracking into private notes.
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" id="insertTrackingBtn" type="button">Insert Open Tracking</button>
+      <button class="btn btn-secondary" id="refreshEditorBtn" type="button">Refresh</button>
+    </div>
+
+    <div class="status" id="editorStatus">Ready to insert tracking into the current editor.</div>
+  </div>
+
+  <script src="./scripts/editor.js"></script>
+</body>
+</html>

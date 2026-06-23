@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Tracker Dashboard</title>
+  <script src="{{{appClient}}}{{{appclient}}}"></script>
+  <link rel="stylesheet" href="https://static.freshdev.io/fdk/2.0/assets/freshworks.css">
+  <style>
+    :root {
+      --ink: #17324d;
+      --ink-soft: #62738a;
+      --surface: rgba(255, 255, 255, 0.96);
+      --surface-muted: #f6f8fc;
+      --border: #dde5ef;
+      --primary: #17324d;
+      --primary-soft: #eef5ff;
+      --success: #1f7a62;
+      --danger: #b42318;
+      --warning: #9a6700;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 22px;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(circle at top left, #ffffff 0, #f5f7fb 48%, #ecf2f9 100%);
+      color: var(--ink);
+    }
+
+    .page {
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+
+    .shell {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: 0 18px 38px rgba(23, 50, 77, 0.08);
+      padding: 24px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 30px;
+      letter-spacing: -0.03em;
+    }
+
+    .subcopy {
+      margin: 0;
+      max-width: 860px;
+      color: var(--ink-soft);
+      line-height: 1.6;
+    }
+
+    .hero {
+      display: flex;
+      gap: 18px;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .btn {
+      appearance: none;
+      min-height: 40px;
+      padding: 0 16px;
+      border-radius: 10px;
+      border: 1px solid #cad5e3;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid #dae4ef;
+      background: #f3f7fc;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-top: 24px;
+    }
+
+    .metric-card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: linear-gradient(180deg, #ffffff 0, #f8fbff 100%);
+      padding: 16px;
+    }
+
+    .metric-card strong {
+      display: block;
+      margin-top: 10px;
+      font-size: 28px;
+      letter-spacing: -0.03em;
+    }
+
+    .metric-label {
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: end;
+      margin-top: 26px;
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid #e4ebf4;
+      background: var(--surface-muted);
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      min-width: 180px;
+      flex: 1 1 220px;
+    }
+
+    .field label {
+      color: var(--ink-soft);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .field input,
+    .field select {
+      min-height: 40px;
+      border-radius: 10px;
+      border: 1px solid #cad5e3;
+      padding: 0 12px;
+      font: inherit;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .section {
+      margin-top: 24px;
+    }
+
+    .section-head {
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: -0.03em;
+    }
+
+    .section-copy {
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .table-shell {
+      overflow: hidden;
+      border-radius: 16px;
+      border: 1px solid #e3eaf3;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid #edf2f7;
+      font-size: 14px;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f6f9fd;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .tag-read {
+      background: #e7f7ef;
+      color: var(--success);
+    }
+
+    .tag-unread {
+      background: #eef5ff;
+      color: #245b90;
+    }
+
+    .tag-blacklisted {
+      background: #fff5e8;
+      color: var(--warning);
+    }
+
+    .tag-runtime-ok {
+      background: #e7f7ef;
+      color: var(--success);
+    }
+
+    .tag-runtime-warn {
+      background: #ffefee;
+      color: var(--danger);
+    }
+
+    .muted {
+      color: var(--ink-soft);
+    }
+
+    .stack {
+      display: grid;
+      gap: 4px;
+    }
+
+    .events {
+      display: grid;
+      gap: 12px;
+    }
+
+    .event-card {
+      border: 1px solid #e4ebf4;
+      border-radius: 14px;
+      background: #fff;
+      padding: 14px;
+    }
+
+    .event-meta {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+      color: var(--ink-soft);
+      font-size: 12px;
+    }
+
+    .loading,
+    .empty {
+      padding: 34px 20px;
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 15px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="shell">
+      <div class="hero">
+        <div>
+          <h1>Email Tracker Dashboard</h1>
+          <p class="subcopy">
+            Review tracked replies, read and unread coverage, blacklisted/scanner activity, and the latest open events relayed through the public pixel bridge.
+          </p>
+        </div>
+        <div class="actions">
+          <span class="pill" id="runtimePill">Checking runtime</span>
+          <button class="btn btn-primary" id="refreshBtn" type="button">Refresh Dashboard</button>
+        </div>
+      </div>
+
+      <div class="metrics" id="metricsGrid"></div>
+
+      <div class="toolbar">
+        <div class="field">
+          <label for="searchInput">Search</label>
+          <input id="searchInput" type="text" placeholder="Ticket subject, requester, or email">
+        </div>
+        <div class="field">
+          <label for="statusFilter">Status</label>
+          <select id="statusFilter">
+            <option value="all">All tracked replies</option>
+            <option value="read">Read</option>
+            <option value="unread">Unread</option>
+            <option value="blacklisted">Has blacklisted opens</option>
+          </select>
+        </div>
+        <div class="field" style="flex:0 0 auto; min-width: 140px;">
+          <label>&nbsp;</label>
+          <button class="btn" id="clearFiltersBtn" type="button">Clear Filters</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h2>Tracked Tickets</h2>
+            <div class="section-copy">Per-ticket rollup of tracked replies and open counts.</div>
+          </div>
+        </div>
+        <div class="table-shell">
+          <div class="loading" id="ticketsLoading">Loading tracked tickets...</div>
+          <div class="empty hidden" id="ticketsEmpty">No tracked replies yet.</div>
+          <table class="hidden" id="ticketsTable">
+            <thead>
+              <tr>
+                <th>Ticket</th>
+                <th>Requester</th>
+                <th>Status</th>
+                <th>Tracked</th>
+                <th>Opens</th>
+                <th>First Open</th>
+                <th>Last Open</th>
+              </tr>
+            </thead>
+            <tbody id="ticketsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div>
+            <h2>Recent Events</h2>
+            <div class="section-copy">Latest pixel events, including blacklisted/scanner activity.</div>
+          </div>
+        </div>
+        <div class="events" id="eventsList"></div>
+        <div class="empty hidden" id="eventsEmpty">No tracking events yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./scripts/dashboard.js"></script>
+</body>
+</html>

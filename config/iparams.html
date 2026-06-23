@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="{{{appClient}}}{{{appclient}}}"></script>
+  <link rel="stylesheet" href="https://static.freshdev.io/fdk/2.0/assets/freshworks.css">
+  <style>
+    :root {
+      --ink: #17324d;
+      --ink-soft: #5f738c;
+      --surface: #ffffff;
+      --surface-muted: #f5f7fb;
+      --border: #dbe4ef;
+      --primary: #17324d;
+      --danger: #b42318;
+      --success: #0b7a45;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(circle at top left, #ffffff 0, #f5f7fb 48%, #eef3f9 100%);
+      color: var(--ink);
+    }
+
+    .page {
+      max-width: 980px;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 18px 36px rgba(23, 50, 77, 0.08);
+      padding: 28px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+      letter-spacing: -0.03em;
+    }
+
+    .subcopy {
+      margin: 0 0 26px;
+      color: var(--ink-soft);
+      line-height: 1.6;
+      max-width: 780px;
+    }
+
+    .section {
+      padding: 22px 0;
+      border-top: 1px solid #edf2f7;
+    }
+
+    .section:first-of-type {
+      padding-top: 0;
+      border-top: none;
+    }
+
+    .section h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+    }
+
+    .section-copy {
+      margin: 0 0 16px;
+      color: var(--ink-soft);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ink-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    select,
+    textarea {
+      width: 100%;
+      min-height: 42px;
+      padding: 10px 12px;
+      border: 1px solid #cbd7e5;
+      border-radius: 10px;
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .helper {
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 42px;
+      padding: 0 4px;
+      color: var(--ink);
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 4px;
+    }
+
+    .btn {
+      appearance: none;
+      border: none;
+      border-radius: 10px;
+      min-height: 42px;
+      padding: 0 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      background: #f3f6fb;
+      color: var(--ink-soft);
+      border: 1px solid #d7e2ef;
+    }
+
+    .status {
+      display: none;
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .status-success {
+      display: block;
+      background: #ebf8f1;
+      color: var(--success);
+      border: 1px solid #bfe7cf;
+    }
+
+    .status-error {
+      display: block;
+      background: #ffefee;
+      color: var(--danger);
+      border: 1px solid #f0c1bc;
+    }
+
+    .status-info {
+      display: block;
+      background: #f3f7fc;
+      color: var(--ink-soft);
+      border: 1px solid #dbe4ef;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Email Tracker for Freshdesk</h1>
+    <p class="subcopy">
+      Verify Freshdesk access, map the ticket fields used for tracking state, and optionally set a bridge secret plus scanner IP blacklist.
+      The bridge URL remains app-owned by default.
+    </p>
+
+    <div class="section">
+      <h2>Freshdesk Access</h2>
+      <p class="section-copy">Use an API key from the Freshdesk account that will own the tracker automation.</p>
+      <div class="grid">
+        <div class="field">
+          <label for="domain">Freshdesk Domain</label>
+          <input id="domain" type="text" placeholder="subdomain.freshdesk.com">
+          <div class="helper">Example: `driveautomation-help.freshdesk.com`</div>
+        </div>
+        <div class="field">
+          <label for="apiKey">API Key</label>
+          <input id="apiKey" type="password" placeholder="Freshdesk API key">
+          <div class="helper">Used for ticket replies, ticket field updates, and private note logging.</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btnVerify" type="button">Verify Credentials</button>
+        <span class="badge" id="fieldStatusBadge">Field map not loaded</span>
+      </div>
+      <div id="validationMessage" class="status"></div>
+    </div>
+
+    <div class="section">
+      <h2>Tracking Field Mapping</h2>
+      <p class="section-copy">Choose existing Freshdesk ticket fields for “Seen” and “Count”. These fields are updated when a real open event is processed.</p>
+      <div class="grid">
+        <div class="field">
+          <label for="seenField">Seen Field</label>
+          <select id="seenField">
+            <option value="">Do not sync a Seen field</option>
+          </select>
+          <div class="helper">Best fit: checkbox, yes/no dropdown, or simple text field.</div>
+        </div>
+        <div class="field">
+          <label for="countField">Count Field</label>
+          <select id="countField">
+            <option value="">Do not sync a Count field</option>
+          </select>
+          <div class="helper">Best fit: number field or text field.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Tracking Behavior</h2>
+      <p class="section-copy">These options affect first-open notes and how the bridge/auth handshake is enforced.</p>
+      <div class="grid">
+        <div class="field">
+          <label for="bridgeSecret">Bridge Secret</label>
+          <input id="bridgeSecret" type="password" placeholder="Shared secret for bridge relay auth">
+          <div class="helper">Must match `BRIDGE_SECRET` on the public email tracker bridge.</div>
+        </div>
+        <div class="field">
+          <label for="ipBlacklist">IP Blacklist</label>
+          <textarea id="ipBlacklist" placeholder="One IP or substring per line"></textarea>
+          <div class="helper">Scanner or proxy IPs listed here stay auditable but are excluded from primary read metrics.</div>
+        </div>
+        <div class="field">
+          <label>First Open Note</label>
+          <div class="toggle">
+            <input id="noteOnFirstOpen" type="checkbox" checked>
+            <span>Write one private ticket note when the first real open happens.</span>
+          </div>
+          <div class="helper">Repeated opens update counters and timeline data without adding note spam.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./assets/iparams.js"></script>
+</body>
+</html>

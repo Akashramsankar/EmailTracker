@@ -1,0 +1,70 @@
+{
+  "platform-version": "3.0",
+  "modules": {
+    "common": {
+      "requests": {
+        "verify_freshdesk_credentials": {},
+        "get_ticket": {},
+        "list_email_configs": {},
+        "list_admin_ticket_fields": {},
+        "list_install_ticket_fields": {},
+        "list_ticket_fields": {},
+        "create_ticket_reply": {},
+        "add_ticket_note": {},
+        "update_ticket": {}
+      },
+      "functions": {
+        "getTrackerDashboardData": {},
+        "getTicketTrackerData": {},
+        "sendTrackedReply": {},
+        "prepareConversationTracking": {},
+        "syncLiveTicketFieldMetadata": {}
+      },
+      "events": {
+        "onAppInstall": {
+          "handler": "onAppInstallHandler"
+        },
+        "onExternalEvent": {
+          "handler": "onExternalEventHandler"
+        }
+      },
+      "location": {
+        "full_page_app": {
+          "url": "index.html",
+          "icon": "icon.svg"
+        }
+      }
+    },
+    "support_ticket": {
+      "location": {
+        "ticket_background": {
+          "url": "runtime.html",
+          "icon": "icon.svg"
+        },
+        "ticket_conversation_editor": {
+          "url": "editor.html",
+          "icon": "icon.svg"
+        },
+        "ticket_sidebar": {
+          "url": "sidebar.html",
+          "icon": "icon.svg"
+        }
+      },
+      "events": {
+        "onTicketCreate": {
+          "handler": "onTicketCreateHandler"
+        },
+        "onTicketUpdate": {
+          "handler": "onTicketUpdateHandler"
+        },
+        "onConversationCreate": {
+          "handler": "onConversationCreateHandler"
+        }
+      }
+    }
+  },
+  "engines": {
+    "node": "24.11.0",
+    "fdk": "10.0.1"
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "verify_freshdesk_credentials": {
+    "schema": {
+      "method": "GET",
+      "host": "<%= context.domain %>",
+      "path": "/api/v2/agents/me",
+      "headers": {
+        "Authorization": "Basic <%= context.encoded_auth %>",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "get_ticket": {
+    "schema": {
+      "method": "GET",
+      "host": "<%= iparam.domain %>",
+      "path": "/api/v2/tickets/<%= context.ticket_id %>?include=requester,stats",
+      "headers": {
+        "Authorization": "Basic <%= iparam.api_key %>",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "list_email_configs": {
+    "schema": {
+      "method": "GET",
+      "host": "<%= iparam.domain %>",
+      "path": "/api/v2/email_configs",
+      "headers": {
+        "Authorization": "Basic <%= iparam.api_key %>",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "list_admin_ticket_fields": {
+    "schema": {
+      "method": "GET",
+      "host": "<%= iparam.domain %>",
+      "path": "/api/v2/admin/ticket_fields",
+      "headers": {
+        "Authorization": "Basic <%= iparam.api_key %>",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "list_install_ticket_fields": {
+    "schema": {
+      "method": "GET",
+      "host": "<%= context.domain %>",
+      "path": "/api/v2/admin/ticket_fields",
+      "headers": {
+        "Authorization": "Basic <%= context.encoded_auth %>",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "list_ticket_fields": {
+    "schema": {
+      "method": "GET",
+      "host": "<%= iparam.domain %>",
+      "path": "/api/v2/ticket_fields?page=<%= context.page %>&per_page=<%= context.per_page %>",
+      "headers": {
+        "Authorization": "Basic <%= iparam.api_key %>",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "create_ticket_reply": {
+    "schema": {
+      "method": "POST",
+      "host": "<%= iparam.domain %>",
+      "path": "/api/v2/tickets/<%= context.ticket_id %>/reply",
+      "headers": {
+        "Authorization": "Basic <%= iparam.api_key %>",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "add_ticket_note": {
+    "schema": {
+      "method": "POST",
+      "host": "<%= iparam.domain %>",
+      "path": "/api/v2/tickets/<%= context.ticket_id %>/notes",
+      "headers": {
+        "Authorization": "Basic <%= iparam.api_key %>",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "update_ticket": {
+    "schema": {
+      "method": "PUT",
+      "host": "<%= iparam.domain %>",
+      "path": "/api/v2/tickets/<%= context.ticket_id %>",
+      "headers": {
+        "Authorization": "Basic <%= iparam.api_key %>",
+        "Content-Type": "application/json"
+      }
+    }
+  }
+}

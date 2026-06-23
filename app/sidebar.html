@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Tracker Sidebar</title>
+  <script src="{{{appClient}}}{{{appclient}}}"></script>
+  <link rel="stylesheet" href="https://static.freshdev.io/fdk/2.0/assets/freshworks.css">
+  <style>
+    :root {
+      --ink: #17324d;
+      --ink-soft: #667b95;
+      --surface: #ffffff;
+      --surface-muted: #f5f7fb;
+      --border: #d9e3ef;
+      --primary: #17324d;
+      --primary-soft: #eef5ff;
+      --success: #1f7a62;
+      --danger: #b42318;
+      --warning: #9a6700;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      background: #f5f7fb;
+      color: var(--ink);
+    }
+
+    .loading {
+      padding: 36px 16px;
+      text-align: center;
+      color: var(--ink-soft);
+      font-size: 14px;
+    }
+
+    .page {
+      padding: 14px 12px 18px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 8px 22px rgba(23, 50, 77, 0.06);
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+
+    h1, h2 {
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
+
+    h1 {
+      font-size: 20px;
+    }
+
+    h2 {
+      font-size: 16px;
+    }
+
+    .subcopy {
+      margin-top: 6px;
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .banner {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.5;
+      background: #f3f7fc;
+      color: var(--ink-soft);
+      border: 1px solid #d8e4f1;
+    }
+
+    .banner-warning {
+      background: #fff5e8;
+      color: var(--warning);
+      border-color: #f2d5a8;
+    }
+
+    .banner-error {
+      background: #ffefee;
+      color: var(--danger);
+      border-color: #f0c1bc;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .metric {
+      border: 1px solid #e3ebf4;
+      border-radius: 14px;
+      padding: 12px 10px;
+      background: linear-gradient(180deg, #ffffff 0, #f8fbff 100%);
+    }
+
+    .metric-label {
+      color: var(--ink-soft);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric-value {
+      margin-top: 8px;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .field label {
+      color: var(--ink-soft);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    select,
+    textarea,
+    input {
+      width: 100%;
+      border: 1px solid #cbd7e5;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    textarea {
+      min-height: 132px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+
+    .helper {
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .btn {
+      appearance: none;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: 10px;
+      border: 1px solid #cad5e3;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .message-card {
+      border: 1px solid #e4ebf4;
+      border-radius: 14px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .message-top {
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .tag-read {
+      background: #e7f7ef;
+      color: var(--success);
+    }
+
+    .tag-unread {
+      background: var(--primary-soft);
+      color: #245b90;
+    }
+
+    .tag-blacklisted {
+      background: #fff5e8;
+      color: var(--warning);
+    }
+
+    .muted {
+      color: var(--ink-soft);
+    }
+
+    .stack {
+      display: grid;
+      gap: 4px;
+    }
+
+    .event-row {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--ink-soft);
+      font-size: 12px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="loading" id="sidebarLoading">Loading ticket email tracker...</div>
+
+  <div class="page hidden" id="sidebarMain">
+    <div class="card">
+      <h1>Email Tracker</h1>
+      <div class="subcopy">Track opens through the app’s tracked-send flow or use the native Freshdesk conversation editor helper to insert tracking before sending from Freshdesk.</div>
+      <div class="banner" id="runtimeBanner"></div>
+      <div class="metrics" id="metricsGrid"></div>
+    </div>
+
+    <div class="card">
+      <h2>Send Tracked Reply</h2>
+      <div class="subcopy">This sends the reply through the app flow, appends the tracking pixel, and stores a tokenized tracking record.</div>
+      <div class="field">
+        <label for="senderSelect">From Address</label>
+        <select id="senderSelect">
+          <option value="">Default mailbox</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="replyBody">Reply Body</label>
+        <textarea id="replyBody" placeholder="Write the follow-up you want to track."></textarea>
+      </div>
+      <div class="helper">Use this fallback when you want the app to send the tracked reply directly instead of inserting tracking from the native Freshdesk editor.</div>
+      <div class="actions">
+        <button class="btn btn-primary" id="sendTrackedReplyBtn" type="button">Send Tracked Reply</button>
+        <button class="btn" id="refreshBtn" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Tracked Timeline</h2>
+      <div class="subcopy">Latest tracked replies on this ticket, including the first-open state and recent event snippets.</div>
+      <div class="timeline" id="timeline"></div>
+      <div class="muted hidden" id="timelineEmpty">No tracked replies have been sent from this ticket yet.</div>
+    </div>
+  </div>
+
+  <script src="./scripts/sidebar.js"></script>
+</body>
+</html>
