@@ -13,6 +13,7 @@ const MAX_TRACKED_REPLY_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_TRACKED_REPLY_TOTAL_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const NATIVE_PENDING_SELF_OPEN_WINDOW_MS = 10 * 1000;
 const NATIVE_PENDING_CONVERSATION_MATCH_WINDOW_MS = 10 * 60 * 1000;
+const DB_READ_RETRY_DELAYS_MS = [120, 350];
 const EVENT_HOOK_OPTION = "email-tracker-open-v1";
 const DEFAULT_PUBLIC_TRACKER_BRIDGE_URL = normalizeUrl("https://email-tracker-bridge.akashram-trello-bridge.workers.dev");
 const TRACKING_TOKEN_PATTERN = /(?:data-email-tracker-token=["']|token=)([a-f0-9]{32})/gi;
@@ -134,6 +135,12 @@ function truncate(value, maxLength) {
   }
 
   return `${text.slice(0, Math.max(0, maxLength - 1))}\u2026`;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function createId(prefix) {
@@ -402,14 +409,31 @@ function normalizeFieldCollection(collection) {
 }
 
 async function readDbJson(key, fallbackValue) {
-  try {
-    return await $db.get(key);
-  } catch (error) {
-    if (error && error.status === 404) {
-      return fallbackValue;
+  for (let attempt = 0; attempt <= DB_READ_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await $db.get(key);
+    } catch (error) {
+      if (!error || error.status !== 404) {
+        throw error;
+      }
+
+      if (attempt >= DB_READ_RETRY_DELAYS_MS.length) {
+        debugLog("db_read_missing_after_retry", {
+          key,
+          attempts: attempt + 1,
+        });
+        return fallbackValue;
+      }
+
+      debugLog("db_read_missing_retrying", {
+        key,
+        attempt: attempt + 1,
+      });
+      await delay(DB_READ_RETRY_DELAYS_MS[attempt]);
     }
-    throw error;
   }
+
+  return fallbackValue;
 }
 
 async function writeDbJson(key, value) {
@@ -1785,6 +1809,18 @@ exports = {
         allowGenerate: false,
       });
 
+      debugLog("tracked_reply_send_started", {
+        ticket_id: ticketId,
+        body_chars: replyBody.length,
+        native_body_chars: nativeBodyHtml.length,
+        sender_present: Boolean(senderEmail),
+        cc_count: ccEmails.length,
+        bcc_count: bccEmails.length,
+        attachment_count: attachments.length,
+        runtime_hook_present: Boolean(normalizeText(runtimeConfig.external_hook_url)),
+        bridge_present: Boolean(normalizeUrl(runtimeConfig.bridge_public_url)),
+      });
+
       if (!normalizeText(runtimeConfig.external_hook_url)) {
         throw new Error("The tracking hook URL is not initialized yet. Reinstall or update the app so Freshworks can initialize the external event hook.");
       }
@@ -1838,11 +1874,23 @@ exports = {
               body: requestBody,
             });
       } catch (error) {
+        debugLog("tracked_reply_send_request_failed", {
+          ticket_id: ticketId,
+          attachment_count: attachments.length,
+          sender_present: Boolean(senderEmail),
+          status: Number(error && error.status) || 0,
+          error: buildErrorMessage(error, "Freshdesk reply API request failed."),
+        });
+
         if (!shouldRetryWithoutSender(error, senderEmail)) {
           throw error;
         }
 
         delete requestBody.from_email;
+        debugLog("tracked_reply_send_retry_without_sender", {
+          ticket_id: ticketId,
+          attachment_count: attachments.length,
+        });
         response = attachments.length
           ? await sendReplyWithAttachmentsViaBridge(args, requestBody, attachments, ticketId)
           : await invokeRequestTemplate("create_ticket_reply", {
@@ -1903,6 +1951,10 @@ exports = {
         attachment_count: attachments.length,
       });
     } catch (error) {
+      debugLog("tracked_reply_send_failed", {
+        status: Number(error && error.status) || 0,
+        error: buildErrorMessage(error, "Unable to send the tracked reply."),
+      });
       return buildErrorResponse("Unable to send the tracked reply.", error);
     }
   },

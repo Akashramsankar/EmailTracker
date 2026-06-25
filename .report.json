@@ -57,32 +57,37 @@
     },
     {
       "severity": 1,
-      "value": "app/scripts/editor.js::513: Arrow function has a complexity of 16. Maximum allowed is 7.",
+      "value": "app/scripts/editor.js::518: Arrow function has a complexity of 16. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "app/scripts/editor.js::519: 'hasUrl' declared and assigned in different scopes. Possible asynchronous race condition.",
+      "value": "app/scripts/editor.js::524: 'hasUrl' declared and assigned in different scopes. Possible asynchronous race condition.",
       "type": "custom-js-lint"
     },
     {
       "severity": 1,
-      "value": "app/scripts/editor.js::520: 'hasRef' declared and assigned in different scopes. Possible asynchronous race condition.",
+      "value": "app/scripts/editor.js::525: 'hasRef' declared and assigned in different scopes. Possible asynchronous race condition.",
       "type": "custom-js-lint"
     },
     {
       "severity": 1,
-      "value": "app/scripts/editor.js::521: 'hasContent' declared and assigned in different scopes. Possible asynchronous race condition.",
+      "value": "app/scripts/editor.js::526: 'hasContent' declared and assigned in different scopes. Possible asynchronous race condition.",
       "type": "custom-js-lint"
     },
     {
       "severity": 1,
-      "value": "app/scripts/editor.js::568: Function 'parseInvokeResponse' has a complexity of 9. Maximum allowed is 7.",
+      "value": "app/scripts/editor.js::573: Function 'parseInvokeResponse' has a complexity of 9. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "app/scripts/editor.js::582: Function 'resolveInvokeError' has a complexity of 9. Maximum allowed is 7.",
+      "value": "app/scripts/editor.js::587: Function 'resolveInvokeError' has a complexity of 9. Maximum allowed is 7.",
+      "type": "lint"
+    },
+    {
+      "severity": 1,
+      "value": "app/scripts/editor.js::606: Function 'resolveErrorMessage' has a complexity of 15. Maximum allowed is 7.",
       "type": "lint"
     },
     {
@@ -147,142 +152,142 @@
     },
     {
       "severity": 1,
-      "value": "server/server.js::77: Function 'normalizeBoolean' has a complexity of 12. Maximum allowed is 7.",
+      "value": "server/server.js::78: Function 'normalizeBoolean' has a complexity of 12. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::208: Function 'buildErrorMessage' has a complexity of 24. Maximum allowed is 7.",
+      "value": "server/server.js::215: Function 'buildErrorMessage' has a complexity of 24. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::366: Function 'normalizeFieldDefinition' has a complexity of 17. Maximum allowed is 7.",
+      "value": "server/server.js::373: Function 'normalizeFieldDefinition' has a complexity of 17. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::419: Async function 'invokeRequestTemplate' has a complexity of 13. Maximum allowed is 7.",
+      "value": "server/server.js::443: Async function 'invokeRequestTemplate' has a complexity of 13. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::591: Function 'buildConversationTrackingSource' has a complexity of 8. Maximum allowed is 7.",
+      "value": "server/server.js::615: Function 'buildConversationTrackingSource' has a complexity of 8. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::620: Function 'looksLikeConversation' has a complexity of 12. Maximum allowed is 7.",
+      "value": "server/server.js::644: Function 'looksLikeConversation' has a complexity of 12. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::703: Function 'isOutboundEmailConversation' has a complexity of 12. Maximum allowed is 7.",
+      "value": "server/server.js::727: Function 'isOutboundEmailConversation' has a complexity of 12. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::727: Function 'buildTrackedMessageFromConversation' has a complexity of 21. Maximum allowed is 7.",
+      "value": "server/server.js::751: Function 'buildTrackedMessageFromConversation' has a complexity of 21. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::765: Function 'parseEventBrowser' has a complexity of 9. Maximum allowed is 7.",
+      "value": "server/server.js::789: Function 'parseEventBrowser' has a complexity of 9. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::823: Function 'getRequesterInfo' has a complexity of 8. Maximum allowed is 7.",
+      "value": "server/server.js::847: Function 'getRequesterInfo' has a complexity of 8. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::865: Arrow function has a complexity of 17. Maximum allowed is 7.",
+      "value": "server/server.js::889: Arrow function has a complexity of 17. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::917: Async function 'sendReplyWithAttachmentsViaBridge' has a complexity of 16. Maximum allowed is 7.",
+      "value": "server/server.js::941: Async function 'sendReplyWithAttachmentsViaBridge' has a complexity of 16. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1033: Function 'resolveSeenFieldValue' has a complexity of 8. Maximum allowed is 7.",
+      "value": "server/server.js::1057: Function 'resolveSeenFieldValue' has a complexity of 8. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1043: Arrow function has a complexity of 10. Maximum allowed is 7.",
+      "value": "server/server.js::1067: Arrow function has a complexity of 10. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1069: Function 'resolveCountFieldValue' has a complexity of 8. Maximum allowed is 7.",
+      "value": "server/server.js::1093: Function 'resolveCountFieldValue' has a complexity of 8. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1155: Function 'buildFirstOpenNote' has a complexity of 9. Maximum allowed is 7.",
+      "value": "server/server.js::1179: Function 'buildFirstOpenNote' has a complexity of 9. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1214: Function 'isLikelyNativeEditorSelfOpen' has a complexity of 9. Maximum allowed is 7.",
+      "value": "server/server.js::1238: Function 'isLikelyNativeEditorSelfOpen' has a complexity of 9. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1233: Arrow function has a complexity of 21. Maximum allowed is 7.",
+      "value": "server/server.js::1257: Arrow function has a complexity of 21. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1283: Function 'finalizePendingNativeMessageFromConversation' has a complexity of 17. Maximum allowed is 7.",
+      "value": "server/server.js::1307: Function 'finalizePendingNativeMessageFromConversation' has a complexity of 17. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1329: Function 'buildRelaySigningPayload' has a complexity of 12. Maximum allowed is 7.",
+      "value": "server/server.js::1353: Function 'buildRelaySigningPayload' has a complexity of 12. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1364: Function 'validateAppSettings' has a complexity of 10. Maximum allowed is 7.",
+      "value": "server/server.js::1388: Function 'validateAppSettings' has a complexity of 10. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1412: Function 'buildTicketSummary' has a complexity of 12. Maximum allowed is 7.",
+      "value": "server/server.js::1436: Function 'buildTicketSummary' has a complexity of 12. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1495: Arrow function has a complexity of 13. Maximum allowed is 7.",
+      "value": "server/server.js::1519: Arrow function has a complexity of 13. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1595: Async function 'initializeRuntimeConfig' has a complexity of 14. Maximum allowed is 7.",
+      "value": "server/server.js::1619: Async function 'initializeRuntimeConfig' has a complexity of 14. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1743: Arrow function has a complexity of 10. Maximum allowed is 7.",
+      "value": "server/server.js::1767: Arrow function has a complexity of 10. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::1764: Async method 'sendTrackedReply' has a complexity of 31. Maximum allowed is 7.",
+      "value": "server/server.js::1788: Async method 'sendTrackedReply' has a complexity of 35. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::2019: Async method 'onConversationCreateHandler' has a complexity of 37. Maximum allowed is 7.",
+      "value": "server/server.js::2071: Async method 'onConversationCreateHandler' has a complexity of 37. Maximum allowed is 7.",
       "type": "lint"
     },
     {
       "severity": 1,
-      "value": "server/server.js::2147: Async method 'onExternalEventHandler' has a complexity of 29. Maximum allowed is 7.",
+      "value": "server/server.js::2199: Async method 'onExternalEventHandler' has a complexity of 29. Maximum allowed is 7.",
       "type": "lint"
     },
     {

@@ -344,6 +344,11 @@ async function sendTrackedReplyFromEditor() {
   } catch (error) {
     const message = resolveErrorMessage(error, "Unable to send the tracked reply.");
     console.error("Unable to send tracked reply from editor:", error);
+    void logServerDiagnostic("editor_send_tracked_reply_failed", {
+      ticket_id: state.ticketId,
+      error: message,
+      attachment_count: state.selectedAttachmentFiles.length,
+    });
     setStatus(message);
     notify("error", message);
   } finally {
@@ -599,6 +604,24 @@ function resolveInvokeError(payload) {
 }
 
 function resolveErrorMessage(error, fallback) {
+  if (error && error.detail) {
+    return typeof error.detail === "string" ? error.detail : JSON.stringify(error.detail);
+  }
+  if (error && error.response) {
+    const parsed = parseInvokeResponse(error);
+    const parsedMessage = resolveInvokeError(parsed);
+    if (parsedMessage) {
+      return parsedMessage;
+    }
+    if (typeof error.response === "string") {
+      return error.response;
+    }
+  }
+  if (error && error.error) {
+    return typeof error.error === "string"
+      ? error.error
+      : error.error.message || JSON.stringify(error.error);
+  }
   if (error && error.message) return error.message;
   if (typeof error === "string") return error;
   return fallback;
