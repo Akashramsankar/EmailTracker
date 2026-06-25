@@ -1,15 +1,32 @@
-const crypto = require("node:crypto");
+const { KJUR, KEYUTIL, b64tohex } = require("jsrsasign");
 
 const RUNTIME_KEY = "email_tracker_runtime_v1";
 const MESSAGES_KEY = "email_tracker_messages_v1";
 const LIVE_FIELD_METADATA_KEY = "email_tracker_live_field_metadata_v1";
+const NATIVE_REPLY_DIAGNOSTICS_KEY = "email_tracker_native_reply_diagnostics_v1";
 const PAGE_SIZE = 100;
 const MAX_TRACKED_MESSAGES = 1000;
 const MAX_EVENTS_PER_MESSAGE = 80;
+const MAX_DIAGNOSTIC_EVENTS = 120;
+const MAX_TRACKED_REPLY_ATTACHMENTS = 5;
+const MAX_TRACKED_REPLY_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const MAX_TRACKED_REPLY_TOTAL_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+const NATIVE_PENDING_SELF_OPEN_WINDOW_MS = 10 * 1000;
+const NATIVE_PENDING_CONVERSATION_MATCH_WINDOW_MS = 10 * 60 * 1000;
 const EVENT_HOOK_OPTION = "email-tracker-open-v1";
-const DEFAULT_PUBLIC_TRACKER_BRIDGE_URL = normalizeUrl("https://email-tracker-bridge.onrender.com");
-const DEFAULT_BRIDGE_SECRET = "dev-email-tracker-bridge-secret";
+const DEFAULT_PUBLIC_TRACKER_BRIDGE_URL = normalizeUrl("https://email-tracker-bridge.akashram-trello-bridge.workers.dev");
 const TRACKING_TOKEN_PATTERN = /(?:data-email-tracker-token=["']|token=)([a-f0-9]{32})/gi;
+const BRIDGE_RELAY_PUBLIC_KEY = [
+  "-----BEGIN PUBLIC KEY-----",
+  "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1i8OpMbRIyc8yNhyl9tO",
+  "HCq7rrFJX5F8Sp0n0s91n1hLVHbk3sPRoBZt64Ss8pw2sjL/hGgLDsZg8sk6IXim",
+  "CvgQz6AD05uatfsm9ks5HkNEDdUqUZzdsygpw1pJRT8g9xQ7CoNhQyc1DOaAHi2b",
+  "NylJVxHUZAB2WijM5J4k1FlKL5t8ZjpNrKHMkJ6F4wvbnguF0sRt5BVzsTALW5KI",
+  "01xp0IKyWNJ2Htk0b7xodEdOydUmmPZmz4tJyBEpFFujlHQ68tYEqgN1pJu4TE/b",
+  "DzbtmLqbVTWORr6B2uRvtsQP3OPj04dNyCrOuf4ZvLhDt6/S1kqg7q77E4FOFAXJ",
+  "rQIDAQAB",
+  "-----END PUBLIC KEY-----",
+].join("\n");
 
 function parseArgs(args) {
   if (!args) {
@@ -110,15 +127,30 @@ function createId(prefix) {
 }
 
 function buildToken() {
-  return crypto.randomBytes(16).toString("hex");
+  let token = Date.now().toString(16);
+  while (token.length < 32) {
+    token += Math.random().toString(16).slice(2);
+  }
+  return token.slice(0, 32);
 }
 
 function hashValue(value) {
-  return crypto.createHash("sha256").update(String(value)).digest("hex");
+  let hash = 2166136261;
+  const text = String(value);
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function buildRelaySignature(token, hookUrl, secret) {
-  return hashValue([normalizeText(token), normalizeUrl(hookUrl), normalizeText(secret)].join("|"));
+function tokenLogRef(token) {
+  const normalized = normalizeText(token);
+  if (!normalized) {
+    return "";
+  }
+
+  return `${hashValue(normalized)}:${normalized.slice(-6)}`;
 }
 
 function getHeaderCaseInsensitive(headers, headerName) {
@@ -206,20 +238,19 @@ function resolveBridgeUrl(args) {
   const iparams = getIparams(args);
   const appSettings = getAppSettings(args);
   return normalizeUrl(
-    iparams.bridge_public_url ||
-      appSettings.bridge_public_url ||
+    appSettings.bridge_public_url ||
+      iparams.bridge_public_url ||
       DEFAULT_PUBLIC_TRACKER_BRIDGE_URL
   );
 }
 
-function resolveBridgeSecret(args) {
-  const iparams = getIparams(args);
-  const appSettings = getAppSettings(args);
-  return normalizeText(
-    iparams.bridge_secret ||
-      appSettings.bridge_secret ||
-      DEFAULT_BRIDGE_SECRET
-  );
+function buildBridgeRequestContext(args, path) {
+  const bridgeUrl = resolveBridgeUrl(args);
+  const parsed = new URL(bridgeUrl);
+  return {
+    bridge_host: parsed.host,
+    bridge_path: `${parsed.pathname.replace(/\/+$/, "")}${path}`.replace(/^\/?/, "/"),
+  };
 }
 
 function shouldWriteFirstOpenNote(args) {
@@ -424,23 +455,20 @@ async function writeLiveFieldMetadata(fields) {
   });
 }
 
-function buildPixelUrl(runtimeConfig, token, args) {
+function buildPixelUrl(runtimeConfig, token) {
   const bridgeUrl = normalizeUrl(runtimeConfig && runtimeConfig.bridge_public_url);
   const hookUrl = normalizeText(runtimeConfig && runtimeConfig.external_hook_url);
-  const secret = resolveBridgeSecret(args);
 
   if (!bridgeUrl || !hookUrl) {
     return "";
   }
 
-  const signature = buildRelaySignature(token, hookUrl, secret);
-  const params = new URLSearchParams({
-    token,
-    hook: hookUrl,
-    sig: signature,
-  });
+  const params = [
+    `token=${encodeURIComponent(token)}`,
+    `hook=${encodeURIComponent(hookUrl)}`,
+  ].join("&");
 
-  return `${bridgeUrl}/pixel?${params.toString()}`;
+  return `${bridgeUrl}/pixel?${params}`;
 }
 
 function buildTrackedEmailHtml(bodyText, pixelUrl) {
@@ -452,9 +480,32 @@ function buildTrackedEmailHtml(bodyText, pixelUrl) {
   return [
     '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#17324d;">',
     `<div>${safeBody || " "}</div>`,
+    '<div style="display:none!important;visibility:hidden;opacity:0;font-size:0;line-height:0;max-height:0;max-width:0;overflow:hidden;">Tracked by Email Tracker</div>',
     pixelMarkup,
     "</div>",
   ].join("");
+}
+
+function buildTrackedEmailHtmlFromNativeBody(bodyHtml, pixelUrl) {
+  const html = normalizeText(bodyHtml);
+  const pixelMarkup = pixelUrl
+    ? `<img src="${escapeHtml(pixelUrl)}" alt="" width="1" height="1" style="display:block;border:0;width:1px;height:1px;" />`
+    : "";
+  const markerMarkup = '<div style="display:none!important;visibility:hidden;opacity:0;font-size:0;line-height:0;max-height:0;max-width:0;overflow:hidden;">Tracked by Email Tracker</div>';
+
+  if (!html) {
+    return buildTrackedEmailHtml(" ", pixelUrl);
+  }
+
+  if (/<\/body\s*>/i.test(html)) {
+    return html.replace(/<\/body\s*>/i, `${markerMarkup}${pixelMarkup}</body>`);
+  }
+
+  if (/<\/html\s*>/i.test(html)) {
+    return html.replace(/<\/html\s*>/i, `${markerMarkup}${pixelMarkup}</html>`);
+  }
+
+  return `${html}${markerMarkup}${pixelMarkup}`;
 }
 
 function buildTrackedEditorHtmlSnippet(pixelUrl, token) {
@@ -468,6 +519,43 @@ function buildTrackedEditorHtmlSnippet(pixelUrl, token) {
   ].join("");
 }
 
+function flattenConversationContent(value, parts) {
+  if (value === null || value === undefined) {
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => flattenConversationContent(item, parts));
+    return;
+  }
+
+  if (typeof value === "object") {
+    Object.keys(value).forEach((key) => {
+      flattenConversationContent(value[key], parts);
+    });
+    return;
+  }
+
+  const text = normalizeText(value);
+  if (text) {
+    parts.push(text);
+  }
+}
+
+function buildConversationTrackingSource(conversation) {
+  const parts = [];
+
+  flattenConversationContent(conversation && conversation.body, parts);
+  flattenConversationContent(conversation && conversation.body_html, parts);
+  flattenConversationContent(conversation && conversation.bodyHtml, parts);
+  flattenConversationContent(conversation && conversation.body_text, parts);
+  flattenConversationContent(conversation && conversation.bodyText, parts);
+  flattenConversationContent(conversation && conversation.full_text, parts);
+  flattenConversationContent(conversation && conversation.plain_text, parts);
+
+  return parts.join("\n");
+}
+
 function extractTrackingTokenFromBody(bodyHtml) {
   const source = String(bodyHtml === null || bodyHtml === undefined ? "" : bodyHtml);
   const matches = Array.from(source.matchAll(TRACKING_TOKEN_PATTERN));
@@ -477,6 +565,93 @@ function extractTrackingTokenFromBody(bodyHtml) {
 
   const latestMatch = matches[matches.length - 1];
   return normalizeText(latestMatch && latestMatch[1]);
+}
+
+function extractTrackingTokenFromConversation(conversation) {
+  return extractTrackingTokenFromBody(buildConversationTrackingSource(conversation));
+}
+
+function looksLikeConversation(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  return Boolean(
+    value.id ||
+      value.ticket_id ||
+      value.ticketId ||
+      value.body ||
+      value.body_html ||
+      value.bodyText ||
+      value.body_text ||
+      value.plain_text ||
+      value.kind ||
+      value.source
+  );
+}
+
+function getConversationFromEventArgs(args) {
+  const data = (args && args.data) || {};
+  const candidates = [
+    data.conversation,
+    data.ticket_conversation,
+    data.ticketConversation,
+    data.reply,
+    data.note,
+    data,
+  ];
+
+  return candidates.find(looksLikeConversation) || null;
+}
+
+function getConversationTicketId(conversation) {
+  return Number(
+    conversation &&
+      (conversation.ticket_id ||
+        conversation.ticketId ||
+        (conversation.ticket && conversation.ticket.id))
+  ) || 0;
+}
+
+function getConversationId(conversation) {
+  return Number(conversation && (conversation.id || conversation.conversation_id)) || 0;
+}
+
+function sanitizeDiagnosticDetails(details) {
+  const sanitized = {};
+  Object.keys(details && typeof details === "object" ? details : {}).forEach((key) => {
+    const value = details[key];
+    if (value === null || value === undefined) {
+      return;
+    }
+
+    if (typeof value === "number" || typeof value === "boolean") {
+      sanitized[key] = value;
+      return;
+    }
+
+    if (typeof value === "string") {
+      sanitized[key] = truncate(value, 160);
+    }
+  });
+  return sanitized;
+}
+
+function debugLog(message, details) {
+  console.error("[EmailTrackerDebug]", message, sanitizeDiagnosticDetails(details));
+}
+
+async function appendDiagnosticEvent(eventName, details) {
+  const stored = await readDbJson(NATIVE_REPLY_DIAGNOSTICS_KEY, { items: [] });
+  const items = Array.isArray(stored && stored.items) ? stored.items : [];
+  items.unshift({
+    event_name: normalizeText(eventName) || "unknown",
+    details: sanitizeDiagnosticDetails(details),
+    created_at: new Date().toISOString(),
+  });
+  await writeDbJson(NATIVE_REPLY_DIAGNOSTICS_KEY, {
+    items: items.slice(0, MAX_DIAGNOSTIC_EVENTS),
+  });
 }
 
 function isOutboundEmailConversation(conversation) {
@@ -506,19 +681,22 @@ function isOutboundEmailConversation(conversation) {
 function buildTrackedMessageFromConversation(conversation, ticket, token) {
   const requesterInfo = getRequesterInfo(ticket);
   const createdAt = normalizeText(conversation && conversation.created_at);
+  const ticketId = getConversationTicketId(conversation) || Number(ticket && ticket.id) || 0;
+  const previewText =
+    normalizeText(conversation && conversation.body_text) ||
+    normalizeText(conversation && conversation.bodyText) ||
+    normalizeText(conversation && conversation.plain_text) ||
+    stripHtml(buildConversationTrackingSource(conversation));
 
   return {
     id: createId("msg"),
     token,
-    ticket_id: Number(conversation && conversation.ticket_id) || Number(ticket && ticket.id) || 0,
+    ticket_id: ticketId,
     ticket_subject: normalizeText(ticket && ticket.subject),
     requester_email: requesterInfo.email,
     requester_name: requesterInfo.name,
-    reply_subject: normalizeText(ticket && ticket.subject) || `Ticket #${Number(ticket && ticket.id) || 0}`,
-    body_preview: truncate(
-      normalizeText(conversation && conversation.body_text) || stripHtml(conversation && conversation.body),
-      240
-    ),
+    reply_subject: normalizeText(ticket && ticket.subject) || `Ticket #${ticketId}`,
+    body_preview: truncate(previewText, 240),
     created_at: createdAt ? Date.parse(createdAt) || Date.now() : Date.now(),
     open_count: 0,
     unique_open_count: 0,
@@ -531,7 +709,8 @@ function buildTrackedMessageFromConversation(conversation, ticket, token) {
       conversation && (conversation.from_email || conversation.support_email)
     ),
     sender_fallback_used: false,
-    send_response_id: Number(conversation && conversation.id) || 0,
+    send_response_id: getConversationId(conversation),
+    message_source: "conversation_token_detected",
     conversation_kind: normalizeText(conversation && conversation.kind),
     conversation_source: Number(conversation && conversation.source) || 0,
   };
@@ -616,6 +795,62 @@ function buildSenderOptions(emailConfigs) {
     }));
 }
 
+function normalizeEmailList(value) {
+  if (Array.isArray(value)) {
+    return uniqueStrings(value.map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+      return item && (item.email || item.address || item.value);
+    }));
+  }
+
+  return splitLinesAndCsv(value);
+}
+
+function normalizeReplyAttachments(value) {
+  const attachments = Array.isArray(value) ? value : [];
+  let totalBytes = 0;
+
+  if (attachments.length > MAX_TRACKED_REPLY_ATTACHMENTS) {
+    throw new Error(`Attach up to ${MAX_TRACKED_REPLY_ATTACHMENTS} files per tracked reply.`);
+  }
+
+  return attachments.map((attachment, index) => {
+    const filename = normalizeText(
+      attachment && (attachment.filename || attachment.name || `attachment-${index + 1}`)
+    );
+    const contentType = normalizeText(attachment && (attachment.content_type || attachment.type)) ||
+      "application/octet-stream";
+    const dataBase64 = normalizeText(attachment && (attachment.data_base64 || attachment.base64 || attachment.content));
+    const size = Number(attachment && attachment.size) || Math.floor((dataBase64.length * 3) / 4);
+
+    if (!filename) {
+      throw new Error("Attachment filename is required.");
+    }
+
+    if (!dataBase64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(dataBase64)) {
+      throw new Error(`Attachment ${filename} is not a valid base64 payload.`);
+    }
+
+    if (size > MAX_TRACKED_REPLY_ATTACHMENT_BYTES) {
+      throw new Error(`Attachment ${filename} exceeds the ${Math.floor(MAX_TRACKED_REPLY_ATTACHMENT_BYTES / 1024 / 1024)} MB limit.`);
+    }
+
+    totalBytes += size;
+    if (totalBytes > MAX_TRACKED_REPLY_TOTAL_ATTACHMENT_BYTES) {
+      throw new Error(`Attachments exceed the ${Math.floor(MAX_TRACKED_REPLY_TOTAL_ATTACHMENT_BYTES / 1024 / 1024)} MB total limit.`);
+    }
+
+    return {
+      filename,
+      content_type: contentType,
+      data_base64: dataBase64,
+      size,
+    };
+  });
+}
+
 async function fetchTicket(ticketId) {
   return await invokeRequestTemplate("get_ticket", {
     ticket_id: ticketId,
@@ -626,12 +861,38 @@ async function fetchReplySenderOptions() {
   try {
     return buildSenderOptions(await invokeRequestTemplate("list_email_configs", {}));
   } catch (error) {
-    console.warn("Unable to load reply sender options:", buildErrorMessage(error, "Unable to list email configs."));
+    debugLog("reply_sender_options_load_failed", {
+      error: buildErrorMessage(error, "Unable to list email configs."),
+    });
     return [];
   }
 }
 
-async function fetchTicketFieldDefinitions(args) {
+async function sendReplyWithAttachmentsViaBridge(args, requestBody, attachments, ticketId) {
+  const iparams = getIparams(args);
+  const domain = normalizeText(iparams.domain);
+  const apiKey = normalizeText(iparams.api_key);
+
+  if (!domain || !apiKey) {
+    throw new Error("Freshdesk domain and API key are required for attachment replies.");
+  }
+
+  return await invokeRequestTemplate("bridge_create_ticket_reply", {
+    context: buildBridgeRequestContext(args, "/freshdesk/reply"),
+    body: {
+      domain,
+      api_key: apiKey.startsWith("Basic ") ? apiKey : `Basic ${apiKey}`,
+      ticket_id: ticketId,
+      body: requestBody.body,
+      from_email: requestBody.from_email,
+      cc_emails: requestBody.cc_emails || [],
+      bcc_emails: requestBody.bcc_emails || [],
+      attachments,
+    },
+  });
+}
+
+async function fetchTicketFieldDefinitions() {
   try {
     const direct = await invokeRequestTemplate("list_admin_ticket_fields", {});
     const normalizedDirect = normalizeFieldCollection(direct);
@@ -639,14 +900,18 @@ async function fetchTicketFieldDefinitions(args) {
       return mergeFieldDefinitions(normalizedDirect, await readLiveFieldMetadata());
     }
   } catch (error) {
-    console.warn("Unable to load admin ticket fields:", buildErrorMessage(error, "Unable to load admin ticket fields."));
+    debugLog("admin_ticket_fields_load_failed", {
+      error: buildErrorMessage(error, "Unable to load admin ticket fields."),
+    });
   }
 
   try {
     const paginated = await fetchPaginated("list_ticket_fields", {});
     return mergeFieldDefinitions(normalizeFieldCollection(paginated), await readLiveFieldMetadata());
   } catch (error) {
-    console.warn("Unable to load public ticket fields:", buildErrorMessage(error, "Unable to load ticket fields."));
+    debugLog("public_ticket_fields_load_failed", {
+      error: buildErrorMessage(error, "Unable to load ticket fields."),
+    });
   }
 
   return mergeFieldDefinitions([], await readLiveFieldMetadata());
@@ -756,7 +1021,7 @@ async function updateTicketTrackingFields(ticketId, message, args) {
     return;
   }
 
-  const fields = await fetchTicketFieldDefinitions(args);
+  const fields = await fetchTicketFieldDefinitions();
   const customFields = {};
 
   if (seenFieldName) {
@@ -784,7 +1049,10 @@ async function updateTicketTrackingFields(ticketId, message, args) {
       },
     });
   } catch (error) {
-    console.warn("Unable to update ticket tracking fields:", buildErrorMessage(error, "Failed to update ticket fields."));
+    debugLog("ticket_tracking_fields_update_failed", {
+      ticket_id: ticketId,
+      error: buildErrorMessage(error, "Failed to update ticket fields."),
+    });
   }
 }
 
@@ -800,7 +1068,10 @@ async function addPrivateNote(ticketId, body) {
       },
     });
   } catch (error) {
-    console.warn("Unable to add private note:", buildErrorMessage(error, "Failed to add note."));
+    debugLog("private_note_add_failed", {
+      ticket_id: ticketId,
+      error: buildErrorMessage(error, "Failed to add note."),
+    });
   }
 }
 
@@ -830,6 +1101,10 @@ function buildFirstOpenNote(message, eventRecord) {
 }
 
 function buildMessageStatus(message) {
+  if (message.native_pending && Number(message.open_count) <= 0) {
+    return "pending";
+  }
+
   if (Number(message.open_count) > 0) {
     return "read";
   }
@@ -857,6 +1132,188 @@ function buildEventRecord(payload, headers, blacklistEntries) {
     fingerprint,
     blacklisted,
   };
+}
+
+function isLikelyNativeEditorSelfOpen(message, eventRecord) {
+  if (!message || !eventRecord || eventRecord.event_type !== "open" || Number(message.open_count) > 0) {
+    return false;
+  }
+
+  const createdAt = Number(message.created_at) || 0;
+  const occurredAt = Date.parse(eventRecord.occurred_at) || Date.now();
+  if (!createdAt) {
+    return Boolean(message.native_pending);
+  }
+
+  const ageMs = occurredAt - createdAt;
+  return ageMs >= 0 && ageMs <= NATIVE_PENDING_SELF_OPEN_WINDOW_MS;
+}
+
+function repairNativePendingSelfOpenCounters(messages) {
+  let changed = false;
+  const now = Date.now();
+
+  (Array.isArray(messages) ? messages : []).forEach((message) => {
+    if (!message || !message.native_pending || Number(message.open_count) <= 0) {
+      if (
+        message &&
+        message.native_pending &&
+        Number(message.created_at) &&
+        now - Number(message.created_at) > NATIVE_PENDING_SELF_OPEN_WINDOW_MS
+      ) {
+        message.native_pending = false;
+        message.native_pending_expired_at = now;
+        changed = true;
+      }
+      return;
+    }
+
+    const firstOpenedAt = Date.parse(message.first_opened_at) || 0;
+    const createdAt = Number(message.created_at) || 0;
+    if (createdAt && firstOpenedAt && firstOpenedAt - createdAt > NATIVE_PENDING_SELF_OPEN_WINDOW_MS) {
+      return;
+    }
+
+    const previousOpenCount = Number(message.open_count) || 0;
+    message.ignored_open_count = (Number(message.ignored_open_count) || 0) + previousOpenCount;
+    message.last_ignored_open_at = message.last_opened_at || message.first_opened_at || message.last_ignored_open_at || "";
+    message.open_count = 0;
+    message.unique_open_count = 0;
+    message.first_opened_at = "";
+    message.last_opened_at = "";
+    message.native_self_open_repaired_at = Date.now();
+
+    (Array.isArray(message.opens) ? message.opens : []).forEach((eventRecord) => {
+      if (!eventRecord || eventRecord.event_type !== "open") {
+        return;
+      }
+
+      eventRecord.ignored = true;
+      eventRecord.ignore_reason = eventRecord.ignore_reason || "native_editor_self_open";
+    });
+
+    changed = true;
+
+    if (Number(message.created_at) && now - Number(message.created_at) > NATIVE_PENDING_SELF_OPEN_WINDOW_MS) {
+      message.native_pending = false;
+      message.native_pending_expired_at = now;
+    }
+  });
+
+  return changed;
+}
+
+function finalizePendingNativeMessageFromConversation(messages, conversation, ticketId) {
+  const normalizedTicketId = Number(ticketId) || getConversationTicketId(conversation);
+  if (!normalizedTicketId) {
+    return null;
+  }
+
+  const conversationCreatedAt = Date.parse(normalizeText(conversation && conversation.created_at)) || Date.now();
+  const pending = (Array.isArray(messages) ? messages : [])
+    .filter((message) => {
+      if (!message || !message.native_pending || Number(message.ticket_id) !== normalizedTicketId) {
+        return false;
+      }
+
+      const createdAt = Number(message.created_at) || 0;
+      if (!createdAt) {
+        return true;
+      }
+
+      return Math.abs(conversationCreatedAt - createdAt) <= NATIVE_PENDING_CONVERSATION_MATCH_WINDOW_MS;
+    })
+    .sort((left, right) => Number(right.created_at || 0) - Number(left.created_at || 0))[0];
+
+  if (!pending) {
+    return null;
+  }
+
+  const conversationId = getConversationId(conversation);
+  if (!Number(pending.send_response_id) && conversationId) {
+    pending.send_response_id = conversationId;
+  }
+  pending.native_pending = false;
+  pending.message_source = pending.message_source || "native_send_intercept";
+  pending.conversation_kind = normalizeText(conversation && conversation.kind);
+  pending.conversation_source = Number(conversation && conversation.source) || 0;
+  pending.sender_email = pending.sender_email || normalizeText(
+    conversation && (conversation.from_email || conversation.support_email)
+  );
+
+  const preview = getMessagePreview(buildTrackedMessageFromConversation(conversation, { id: normalizedTicketId }, pending.token));
+  if (preview) {
+    pending.body_preview = preview;
+  }
+
+  return pending;
+}
+
+function buildRelaySigningPayload(payload) {
+  return JSON.stringify({
+    event_type: normalizeLower(payload && payload.event_type) === "click" ? "click" : "open",
+    token: normalizeText(payload && payload.token),
+    occurred_at: normalizeText(payload && payload.occurred_at),
+    source_ip: normalizeText(payload && payload.source_ip),
+    user_agent: normalizeText(payload && payload.user_agent),
+    browser: normalizeText(payload && payload.browser),
+    device: normalizeText(payload && payload.device),
+    country: normalizeText(payload && payload.country),
+    city: normalizeText(payload && payload.city),
+    target: normalizeText(payload && payload.target),
+  });
+}
+
+function verifyRelaySignature(payload, signature) {
+  const normalizedSignature = normalizeText(signature);
+  if (!normalizedSignature) {
+    return false;
+  }
+
+  try {
+    const publicKey = KEYUTIL.getKey(BRIDGE_RELAY_PUBLIC_KEY);
+    const verifier = new KJUR.crypto.Signature({ alg: "SHA256withRSA" });
+    verifier.init(publicKey);
+    verifier.updateString(buildRelaySigningPayload(payload));
+    return verifier.verify(b64tohex(normalizedSignature));
+  } catch (error) {
+    debugLog("bridge_relay_signature_verify_failed", {
+      error: error && error.message ? error.message : error,
+    });
+    return false;
+  }
+}
+
+function validateAppSettings(args) {
+  const settings = getAppSettings(args);
+  const bridgePublicUrl = normalizeText(settings.bridge_public_url);
+  const noteOnFirstOpen = settings.note_on_first_open;
+  const ipBlacklist = settings.ip_blacklist;
+
+  if (bridgePublicUrl) {
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(bridgePublicUrl);
+    } catch {
+      throw new Error("bridge_public_url must be a valid https URL.");
+    }
+
+    if (parsedUrl.protocol !== "https:") {
+      throw new Error("bridge_public_url must use https.");
+    }
+  }
+
+  if (
+    noteOnFirstOpen !== undefined &&
+    noteOnFirstOpen !== null &&
+    !["true", "false", "1", "0", true, false, 1, 0].includes(noteOnFirstOpen)
+  ) {
+    throw new Error("note_on_first_open must be a boolean value.");
+  }
+
+  if (ipBlacklist !== undefined && ipBlacklist !== null && typeof ipBlacklist !== "string") {
+    throw new Error("ip_blacklist must be a string.");
+  }
 }
 
 function computeUniqueOpenCount(message) {
@@ -982,6 +1439,61 @@ function getMessagePreview(message) {
   return truncate(message.body_preview || message.reply_subject || message.ticket_subject || "", 140);
 }
 
+async function persistPreparedNativeTracking(ticket, token, pixelUrl, bodyPreview) {
+  const ticketId = Number(ticket && ticket.id) || 0;
+  const requesterInfo = getRequesterInfo(ticket);
+  const messages = await readTrackedMessages();
+  const existing = messages.find((message) => normalizeText(message.token) === token);
+
+  if (existing) {
+    debugLog("native_prepare_reused_existing_tracking_record", {
+      ticket_id: ticketId,
+      token_ref: tokenLogRef(token),
+      total_records: messages.length,
+    });
+    return existing;
+  }
+
+  const replySubject = normalizeText(ticket && ticket.subject) || `Ticket #${ticketId}`;
+  const messageRecord = {
+    id: createId("msg"),
+    token,
+    ticket_id: ticketId,
+    ticket_subject: replySubject,
+    requester_email: requesterInfo.email,
+    requester_name: requesterInfo.name,
+    reply_subject: replySubject,
+    body_preview: truncate(bodyPreview || "Native Freshdesk reply tracking prepared.", 240),
+    created_at: Date.now(),
+    open_count: 0,
+    unique_open_count: 0,
+    blacklisted_open_count: 0,
+    first_opened_at: "",
+    last_opened_at: "",
+    first_open_note_added_at: 0,
+    opens: [],
+    ignored_open_count: 0,
+    last_ignored_open_at: "",
+    sender_email: "",
+    sender_fallback_used: false,
+    send_response_id: 0,
+    message_source: "native_send_intercept",
+    native_pending: true,
+    pixel_url: pixelUrl,
+  };
+
+  messages.unshift(messageRecord);
+  await writeTrackedMessages(messages);
+  debugLog("native_prepare_persisted_pending_tracking_record", {
+    ticket_id: ticketId,
+    message_id: messageRecord.id,
+    token_ref: tokenLogRef(token),
+    total_records_before: messages.length - 1,
+    total_records_after: messages.length,
+  });
+  return messageRecord;
+}
+
 function shouldRetryWithoutSender(error, senderEmail) {
   if (!normalizeText(senderEmail)) {
     return false;
@@ -1019,12 +1531,6 @@ async function initializeRuntimeConfig(args, options) {
     changed = true;
   }
 
-  const relaySecretHash = hashValue(resolveBridgeSecret(args));
-  if (normalizeText(nextConfig.bridge_secret_hash) !== relaySecretHash) {
-    nextConfig.bridge_secret_hash = relaySecretHash;
-    changed = true;
-  }
-
   if (changed) {
     await writeRuntimeConfig(nextConfig);
   }
@@ -1043,12 +1549,30 @@ async function touchRuntimeConfigFromEvent(args) {
 }
 
 exports = {
+  onSettingsUpdate: function (args) {
+    try {
+      validateAppSettings(args);
+      return renderData();
+    } catch (error) {
+      return renderData({
+        message: "Invalid app settings.",
+        detail: buildErrorMessage(error, "Invalid app settings."),
+      });
+    }
+  },
+
   getTrackerDashboardData: async function (args) {
     try {
       const runtimeConfig = await initializeRuntimeConfig(args, {
         allowGenerate: false,
       });
       const messages = await readTrackedMessages();
+      if (repairNativePendingSelfOpenCounters(messages)) {
+        await writeTrackedMessages(messages);
+        debugLog("native_pending_self_open_counters_repaired_on_dashboard_load", {
+          total_records: messages.length,
+        });
+      }
       const dashboard = buildDashboardPayload(messages);
       return buildResponse({
         success: true,
@@ -1079,6 +1603,13 @@ exports = {
         fetchReplySenderOptions(),
         readTrackedMessages(),
       ]);
+      if (repairNativePendingSelfOpenCounters(messages)) {
+        await writeTrackedMessages(messages);
+        debugLog("native_pending_self_open_counters_repaired_on_sidebar_load", {
+          ticket_id: ticketId,
+          total_records: messages.length,
+        });
+      }
 
       const requesterInfo = getRequesterInfo(ticket);
       const ticketMessages = messages
@@ -1086,6 +1617,13 @@ exports = {
         .sort((left, right) => Number(right.created_at || 0) - Number(left.created_at || 0));
 
       const ticketSummary = buildTicketSummary(ticketId, ticketMessages);
+      debugLog("sidebar_ticket_data_loaded", {
+        ticket_id: ticketId,
+        total_records: messages.length,
+        ticket_records: ticketMessages.length,
+        pending_records: ticketMessages.filter((message) => message && message.native_pending).length,
+        runtime_hook_present: Boolean(normalizeText(runtimeConfig.external_hook_url)),
+      });
 
       return buildResponse({
         success: true,
@@ -1111,6 +1649,7 @@ exports = {
           open_count: Number(message.open_count) || 0,
           unique_open_count: Number(message.unique_open_count) || 0,
           blacklisted_open_count: Number(message.blacklisted_open_count) || 0,
+          ignored_open_count: Number(message.ignored_open_count) || 0,
           first_opened_at: message.first_opened_at || "",
           last_opened_at: message.last_opened_at || "",
           status: buildMessageStatus(message),
@@ -1126,14 +1665,19 @@ exports = {
     try {
       const payload = parseArgs(args);
       const ticketId = Number(payload.ticket_id);
+      const nativeBodyHtml = normalizeText(payload.body_html || payload.native_body_html);
       const replyBody = normalizeText(payload.body_text || payload.body || payload.reply_body);
+      const bodyPreview = truncate(stripHtml(nativeBodyHtml || replyBody), 240);
       const senderEmail = normalizeText(payload.sender_email);
+      const ccEmails = normalizeEmailList(payload.cc_emails || payload.cc);
+      const bccEmails = normalizeEmailList(payload.bcc_emails || payload.bcc);
+      const attachments = normalizeReplyAttachments(payload.attachments);
 
       if (!ticketId) {
         throw new Error("ticket_id is required.");
       }
 
-      if (!replyBody) {
+      if (!replyBody && !nativeBodyHtml) {
         throw new Error("Reply body is required.");
       }
 
@@ -1145,53 +1689,68 @@ exports = {
         throw new Error("The tracking hook URL is not initialized yet. Refresh the ticket and try again.");
       }
 
-      const ticket = await fetchTicket(ticketId);
+      const ticket = payload.native_send
+        ? {
+            id: ticketId,
+            subject: normalizeText(payload.ticket_subject),
+            requester: {
+              email: normalizeText(payload.requester_email),
+              name: normalizeText(payload.requester_name),
+            },
+          }
+        : await fetchTicket(ticketId);
       const requesterInfo = getRequesterInfo(ticket);
-      if (!requesterInfo.email) {
-        throw new Error("Requester email is unavailable for this ticket.");
-      }
 
       const token = buildToken();
-      const pixelUrl = buildPixelUrl(runtimeConfig, token, args);
+      const pixelUrl = buildPixelUrl(runtimeConfig, token);
       if (!pixelUrl) {
         throw new Error("Unable to build a tracking pixel URL.");
       }
 
       const replySubject = normalizeText(payload.subject || ticket.subject || `Ticket #${ticketId}`);
-      const bodyHtml = buildTrackedEmailHtml(replyBody, pixelUrl);
+      const bodyHtml = nativeBodyHtml
+        ? buildTrackedEmailHtmlFromNativeBody(nativeBodyHtml, pixelUrl)
+        : buildTrackedEmailHtml(replyBody, pixelUrl);
       const requestBody = {
         body: bodyHtml,
-        to_emails: [requesterInfo.email],
-        cc_emails: [],
-        bcc_emails: [],
       };
 
       if (senderEmail) {
         requestBody.from_email = senderEmail;
+      }
+      if (ccEmails.length) {
+        requestBody.cc_emails = ccEmails;
+      }
+      if (bccEmails.length) {
+        requestBody.bcc_emails = bccEmails;
       }
 
       let response;
       let senderFallbackUsed = false;
 
       try {
-        response = await invokeRequestTemplate("create_ticket_reply", {
-          context: {
-            ticket_id: ticketId,
-          },
-          body: requestBody,
-        });
+        response = attachments.length
+          ? await sendReplyWithAttachmentsViaBridge(args, requestBody, attachments, ticketId)
+          : await invokeRequestTemplate("create_ticket_reply", {
+              context: {
+                ticket_id: ticketId,
+              },
+              body: requestBody,
+            });
       } catch (error) {
         if (!shouldRetryWithoutSender(error, senderEmail)) {
           throw error;
         }
 
         delete requestBody.from_email;
-        response = await invokeRequestTemplate("create_ticket_reply", {
-          context: {
-            ticket_id: ticketId,
-          },
-          body: requestBody,
-        });
+        response = attachments.length
+          ? await sendReplyWithAttachmentsViaBridge(args, requestBody, attachments, ticketId)
+          : await invokeRequestTemplate("create_ticket_reply", {
+              context: {
+                ticket_id: ticketId,
+              },
+              body: requestBody,
+            });
         senderFallbackUsed = true;
       }
 
@@ -1204,7 +1763,7 @@ exports = {
         requester_email: requesterInfo.email,
         requester_name: requesterInfo.name,
         reply_subject: replySubject,
-        body_preview: truncate(replyBody, 240),
+        body_preview: bodyPreview,
         created_at: Date.now(),
         open_count: 0,
         unique_open_count: 0,
@@ -1214,30 +1773,57 @@ exports = {
         first_open_note_added_at: 0,
         opens: [],
         sender_email: senderEmail,
+        cc_emails: ccEmails,
+        bcc_emails: bccEmails,
+        attachment_count: attachments.length,
+        attachment_names: attachments.map((attachment) => attachment.filename),
         sender_fallback_used: senderFallbackUsed,
         send_response_id: response && response.id ? response.id : 0,
+        message_source: payload.native_send ? "native_send_api_intercept" : "tracked_send_api",
       });
 
       await writeTrackedMessages(messages);
+      debugLog("tracked_reply_sent_via_api", {
+        ticket_id: ticketId,
+        token_ref: tokenLogRef(token),
+        send_response_id: response && response.id ? response.id : 0,
+        sender_fallback_used: senderFallbackUsed,
+        native_send: Boolean(payload.native_send),
+        cc_count: ccEmails.length,
+        bcc_count: bccEmails.length,
+        attachment_count: attachments.length,
+        total_records: messages.length,
+      });
 
       return buildResponse({
         success: true,
         token,
         pixel_url: pixelUrl,
         sender_fallback_used: senderFallbackUsed,
+        attachment_count: attachments.length,
       });
     } catch (error) {
       return buildErrorResponse("Unable to send the tracked reply.", error);
     }
   },
 
-  prepareConversationTracking: async function (args) {
+  prepareNativeReplyTracking: async function (args) {
     try {
       const payload = parseArgs(args);
       const ticketId = Number(payload.ticket_id);
+      const ticketSubject = normalizeText(payload.ticket_subject) || `Ticket #${ticketId}`;
+      const requesterEmail = normalizeText(payload.requester_email);
+      const requesterName = normalizeText(payload.requester_name);
+      const bodyPreview = normalizeText(payload.body_preview);
+
       if (!ticketId) {
         throw new Error("ticket_id is required.");
       }
+
+      debugLog("native_prepare_requested", {
+        ticket_id: ticketId,
+        body_preview_chars: bodyPreview.length,
+      });
 
       const runtimeConfig = await initializeRuntimeConfig(args, {
         allowGenerate: false,
@@ -1247,32 +1833,64 @@ exports = {
         throw new Error("The tracking hook URL is not initialized yet. Refresh the ticket and try again.");
       }
 
-      const ticket = await fetchTicket(ticketId);
-      const requesterInfo = getRequesterInfo(ticket);
-      if (!requesterInfo.email) {
-        throw new Error("Requester email is unavailable for this ticket.");
-      }
-
+      const ticket = {
+        id: ticketId,
+        subject: ticketSubject,
+        requester: {
+          email: requesterEmail,
+          name: requesterName,
+        },
+      };
       const token = buildToken();
-      const pixelUrl = buildPixelUrl(runtimeConfig, token, args);
+      const pixelUrl = buildPixelUrl(runtimeConfig, token);
       if (!pixelUrl) {
         throw new Error("Unable to build a tracking pixel URL.");
       }
 
       const htmlSnippet = buildTrackedEditorHtmlSnippet(pixelUrl, token);
       if (!htmlSnippet) {
-        throw new Error("Unable to build the tracked editor snippet.");
+        throw new Error("Unable to build the native reply tracking snippet.");
       }
+
+      await persistPreparedNativeTracking(ticket, token, pixelUrl, bodyPreview);
+      debugLog("native_prepare_completed", {
+        ticket_id: ticketId,
+        token_ref: tokenLogRef(token),
+        snippet_chars: htmlSnippet.length,
+      });
 
       return buildResponse({
         success: true,
         token,
         pixel_url: pixelUrl,
         html_snippet: htmlSnippet,
-        requester_email: requesterInfo.email,
       });
     } catch (error) {
-      return buildErrorResponse("Unable to prepare the tracked editor snippet.", error);
+      return buildErrorResponse("Unable to prepare native reply tracking.", error);
+    }
+  },
+
+  logNativeReplyClientEvent: async function (args) {
+    try {
+      const payload = parseArgs(args);
+      const eventName = normalizeText(payload.event_name) || "unknown";
+      const details = sanitizeDiagnosticDetails(payload.details);
+      debugLog("native_client_checkpoint", {
+        event_name: eventName,
+        ...details,
+      });
+      await appendDiagnosticEvent(eventName, details);
+
+      return buildResponse({
+        success: true,
+      });
+    } catch (error) {
+      debugLog("native_client_checkpoint_log_failed", {
+        error: buildErrorMessage(error, "Client checkpoint logging failed."),
+      });
+      return buildResponse({
+        success: false,
+      });
     }
   },
 
@@ -1302,37 +1920,110 @@ exports = {
     await touchRuntimeConfigFromEvent(args);
 
     try {
-      const conversation = args && args.data && args.data.conversation;
-      if (!isOutboundEmailConversation(conversation)) {
+      const conversation = getConversationFromEventArgs(args);
+      const dataKeys = Object.keys((args && args.data) || {}).slice(0, 12);
+      if (!conversation) {
+        debugLog("conversation_event_no_payload", {
+          data_keys: dataKeys,
+        });
         return;
       }
 
-      const token = extractTrackingTokenFromBody(conversation.body);
+      const conversationId = getConversationId(conversation);
+      const ticketId = getConversationTicketId(conversation);
+      debugLog("conversation_event_received", {
+        conversation_id: conversationId,
+        ticket_id: ticketId,
+        kind: normalizeText(conversation && conversation.kind),
+        source: Number(conversation && conversation.source) || 0,
+        incoming: Boolean(conversation && conversation.incoming),
+        private: Boolean(conversation && conversation.private),
+        data_keys: dataKeys,
+      });
+
+      if (!isOutboundEmailConversation(conversation)) {
+        debugLog("conversation_event_ignored_not_outbound", {
+          conversation_id: conversationId,
+          ticket_id: ticketId,
+          kind: normalizeText(conversation && conversation.kind),
+          source: Number(conversation && conversation.source) || 0,
+          incoming: Boolean(conversation && conversation.incoming),
+          private: Boolean(conversation && conversation.private),
+        });
+        return;
+      }
+
+      const token = extractTrackingTokenFromConversation(conversation);
       if (!token) {
+        const messages = await readTrackedMessages();
+        const pending = finalizePendingNativeMessageFromConversation(messages, conversation, ticketId);
+        debugLog("conversation_missing_tracking_token", {
+          conversation_id: conversationId,
+          ticket_id: ticketId,
+          kind: normalizeText(conversation && conversation.kind),
+          source: Number(conversation && conversation.source) || 0,
+          tracking_source_chars: buildConversationTrackingSource(conversation).length,
+          finalized_pending_message_id: pending && pending.id ? pending.id : "",
+        });
+        if (pending) {
+          await writeTrackedMessages(messages);
+          debugLog("conversation_finalized_pending_record_without_token", {
+            conversation_id: conversationId,
+            ticket_id: ticketId,
+            message_id: pending.id,
+            token_ref: tokenLogRef(pending.token),
+            total_records: messages.length,
+          });
+        }
         return;
       }
 
       const messages = await readTrackedMessages();
       const existing = messages.find((item) => normalizeText(item.token) === token);
       if (existing) {
-        if (!Number(existing.send_response_id) && Number(conversation.id)) {
-          existing.send_response_id = Number(conversation.id) || 0;
-          await writeTrackedMessages(messages);
+        if (!Number(existing.send_response_id) && conversationId) {
+          existing.send_response_id = conversationId;
         }
+        existing.native_pending = false;
+        existing.message_source = existing.message_source || "tracked_send_api";
+        existing.conversation_kind = normalizeText(conversation && conversation.kind);
+        existing.conversation_source = Number(conversation && conversation.source) || 0;
+        existing.sender_email = existing.sender_email || normalizeText(
+          conversation && (conversation.from_email || conversation.support_email)
+        );
+        existing.body_preview = getMessagePreview(buildTrackedMessageFromConversation(conversation, { id: ticketId }, token)) ||
+          existing.body_preview;
+        await writeTrackedMessages(messages);
+        debugLog("conversation_finalized_existing_tracking_record", {
+          conversation_id: conversationId,
+          ticket_id: ticketId || Number(existing.ticket_id) || 0,
+          token_ref: tokenLogRef(token),
+          message_id: existing.id,
+          total_records: messages.length,
+        });
         return;
       }
 
-      const ticketId = Number(conversation.ticket_id);
       if (!ticketId) {
+        debugLog("conversation_token_found_without_ticket_id", {
+          conversation_id: conversationId,
+          token_ref: tokenLogRef(token),
+        });
         return;
       }
 
       const ticket = await fetchTicket(ticketId);
       messages.unshift(buildTrackedMessageFromConversation(conversation, ticket, token));
       await writeTrackedMessages(messages);
+      debugLog("conversation_created_tracking_record", {
+        conversation_id: conversationId,
+        ticket_id: ticketId,
+        token_ref: tokenLogRef(token),
+        total_records_after: messages.length,
+      });
     } catch (error) {
       console.error(
-        "Unable to finalize native editor tracking record:",
+        "Unable to finalize conversation tracking record:",
         buildErrorMessage(error, "Conversation tracking finalization failed.")
       );
     }
@@ -1366,16 +2057,14 @@ exports = {
         });
       }
 
-      const relaySecret = resolveBridgeSecret(args);
-      const suppliedSecret =
-        normalizeText(getHeaderCaseInsensitive(headers, "x-email-tracker-bridge-secret")) ||
-        normalizeText(payload.relay_secret);
-
-      if (normalizeText(relaySecret) && suppliedSecret !== relaySecret) {
+      const relaySignature =
+        normalizeText(getHeaderCaseInsensitive(headers, "x-email-tracker-bridge-signature")) ||
+        normalizeText(payload.relay_signature);
+      if (!verifyRelaySignature(payload, relaySignature)) {
         return buildResponse({
           success: false,
           processed: false,
-          message: "Bridge authentication failed.",
+          message: "Bridge signature verification failed.",
         });
       }
 
@@ -1392,13 +2081,39 @@ exports = {
         });
       }
 
+      debugLog("external_tracking_event_received", {
+        ticket_id: Number(message.ticket_id) || 0,
+        token_ref: tokenLogRef(token),
+        event_type: eventRecord.event_type,
+        native_pending: Boolean(message.native_pending),
+        blacklisted: Boolean(eventRecord.blacklisted),
+        source_ip: eventRecord.source_ip,
+        browser: eventRecord.browser,
+        device: eventRecord.device,
+      });
+
       message.opens = [eventRecord, ...(Array.isArray(message.opens) ? message.opens : [])].slice(0, MAX_EVENTS_PER_MESSAGE);
       message.last_event_at = eventRecord.occurred_at;
 
       let firstHumanOpen = false;
+      let ignoredNativeSelfOpen = false;
 
       if (eventRecord.event_type === "open") {
-        if (eventRecord.blacklisted) {
+        if (isLikelyNativeEditorSelfOpen(message, eventRecord)) {
+          ignoredNativeSelfOpen = true;
+          eventRecord.ignored = true;
+          eventRecord.ignore_reason = "native_editor_self_open";
+          message.ignored_open_count = (Number(message.ignored_open_count) || 0) + 1;
+          message.last_ignored_open_at = eventRecord.occurred_at;
+          debugLog("external_tracking_event_ignored_native_editor_self_open", {
+            ticket_id: Number(message.ticket_id) || 0,
+            token_ref: tokenLogRef(token),
+            ignored_open_count: Number(message.ignored_open_count) || 0,
+            source_ip: eventRecord.source_ip,
+            browser: eventRecord.browser,
+            device: eventRecord.device,
+          });
+        } else if (eventRecord.blacklisted) {
           message.blacklisted_open_count = (Number(message.blacklisted_open_count) || 0) + 1;
           message.last_blacklisted_open_at = eventRecord.occurred_at;
         } else {
@@ -1414,7 +2129,7 @@ exports = {
 
       await writeTrackedMessages(messages);
 
-      if (eventRecord.event_type === "open" && !eventRecord.blacklisted) {
+      if (eventRecord.event_type === "open" && !eventRecord.blacklisted && !ignoredNativeSelfOpen) {
         await updateTicketTrackingFields(message.ticket_id, message, args);
 
         if (firstHumanOpen && shouldWriteFirstOpenNote(args)) {
@@ -1430,6 +2145,7 @@ exports = {
         ticket_id: Number(message.ticket_id) || 0,
         token,
         blacklisted: Boolean(eventRecord.blacklisted),
+        ignored: Boolean(ignoredNativeSelfOpen),
         open_count: Number(message.open_count) || 0,
         blacklisted_open_count: Number(message.blacklisted_open_count) || 0,
         event_type: eventRecord.event_type,

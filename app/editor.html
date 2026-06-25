@@ -3,18 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Email Tracker Editor Helper</title>
+  <title>Email Tracker Native Reply</title>
+  <script src="{{{appClient}}}{{{appclient}}}"></script>
   <style>
     :root {
       --ink: #17324d;
       --ink-soft: #526c86;
       --line: #d8e3ee;
-      --panel: #f4f8fc;
       --accent: #1f6fd1;
       --accent-soft: #eaf3ff;
       --success: #027a48;
-      --warning: #9a6700;
-      --warning-soft: #fff6e5;
       --surface: #ffffff;
     }
 
@@ -31,10 +29,10 @@
 
     .shell {
       display: grid;
-      gap: 10px;
+      gap: 8px;
       padding: 10px 12px;
       border-top: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(244, 248, 252, 0.98));
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 252, 0.98));
     }
 
     .topline {
@@ -56,7 +54,6 @@
     .pill {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
       padding: 4px 8px;
       border-radius: 999px;
       background: var(--accent-soft);
@@ -65,62 +62,10 @@
       font-weight: 700;
     }
 
-    .copy {
-      font-size: 12px;
-      line-height: 1.5;
-      color: var(--ink-soft);
-    }
-
-    .warning {
-      padding: 10px 12px;
-      border-radius: 12px;
-      background: var(--warning-soft);
-      color: var(--warning);
-      font-size: 12px;
-      line-height: 1.5;
-    }
-
-    .actions {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .btn {
-      appearance: none;
-      border: 0;
-      border-radius: 999px;
-      padding: 10px 16px;
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: transform 120ms ease, opacity 120ms ease;
-    }
-
-    .btn:hover:not(:disabled) {
-      transform: translateY(-1px);
-    }
-
-    .btn:disabled {
-      opacity: 0.65;
-      cursor: default;
-    }
-
-    .btn-primary {
-      background: var(--accent);
-      color: #fff;
-    }
-
-    .btn-secondary {
-      background: var(--surface);
-      color: var(--ink);
-      border: 1px solid var(--line);
-    }
-
+    .copy,
     .status {
-      min-height: 18px;
       font-size: 12px;
+      line-height: 1.5;
       color: var(--ink-soft);
     }
 
@@ -128,8 +73,70 @@
       color: var(--success);
     }
 
-    .hidden {
-      display: none !important;
+    .btn {
+      appearance: none;
+      width: max-content;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--surface);
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+
+    .btn:disabled {
+      opacity: 0.65;
+      cursor: default;
+    }
+
+    .field {
+      display: grid;
+      gap: 5px;
+    }
+
+    .field label {
+      color: var(--ink-soft);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    select,
+    textarea,
+    input {
+      width: 100%;
+      border: 1px solid #cbd7e5;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 12px;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    textarea {
+      min-height: 76px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+
+    input[type="file"] {
+      padding: 7px 8px;
+      font-size: 12px;
+    }
+
+    .attachment-list {
+      display: grid;
+      gap: 4px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .attachment-list:empty {
+      display: none;
     }
   </style>
 </head>
@@ -137,23 +144,34 @@
   <div class="shell">
     <div class="topline">
       <div class="title">Email Tracker</div>
-      <div class="pill" id="editorModePill">Native Editor Assist</div>
+      <div class="pill" id="editorModePill">Tracking Ready</div>
     </div>
 
     <div class="copy">
-      Insert the tracking pixel into the open Freshdesk email editor, then send the reply from Freshdesk normally.
+      Use this Email Tracker send box for tracked replies. Freshdesk's native Send still works normally, but is not tracked.
     </div>
 
-    <div class="warning">
-      Use this only in email reply or forward editors. Do not insert tracking into private notes.
+    <div class="field">
+      <label for="editorSenderSelect">From</label>
+      <select id="editorSenderSelect">
+        <option value="">Default mailbox</option>
+      </select>
     </div>
 
-    <div class="actions">
-      <button class="btn btn-primary" id="insertTrackingBtn" type="button">Insert Open Tracking</button>
-      <button class="btn btn-secondary" id="refreshEditorBtn" type="button">Refresh</button>
+    <div class="field">
+      <label for="editorReplyBody">Reply</label>
+      <textarea id="editorReplyBody" placeholder="Write a tracked reply..."></textarea>
     </div>
 
-    <div class="status" id="editorStatus">Ready to insert tracking into the current editor.</div>
+    <div class="field">
+      <label for="editorAttachments">Attachments</label>
+      <input id="editorAttachments" type="file" multiple>
+      <div class="attachment-list" id="editorAttachmentList"></div>
+    </div>
+
+    <button class="btn" id="editorSendTrackedReplyBtn" type="button">Send Tracked Reply</button>
+    <button class="btn" id="refreshEditorBtn" type="button">Refresh Tracking</button>
+    <div class="status" id="editorStatus">Loading native reply tracking.</div>
   </div>
 
   <script src="./scripts/editor.js"></script>

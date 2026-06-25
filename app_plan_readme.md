@@ -2,7 +2,7 @@
 
 ## Product Summary
 
-This app tracks opens on Freshdesk ticket replies through the app-owned tracked-send flow and through the native Freshdesk conversation-editor assist flow.
+This app tracks opens on Freshdesk ticket replies by intercepting the native Freshdesk reply send action, inserting an app-owned tracking pixel into the already-open editor, and allowing the native send to continue.
 
 The Freshworks app owns:
 
@@ -20,8 +20,9 @@ The public bridge owns:
 
 ## Current v1 Behavior
 
-- Agents can send tracked replies from the ticket sidebar.
-- Each tracked reply gets a unique token and pixel URL.
+- Agents write and send replies in the native Freshdesk editor.
+- The `ticket_conversation_editor` app intercepts `ticket.sendReply`, inserts a tokenized tracking pixel with `setValue`, and then lets the native send continue.
+- Each tracked email reply gets a unique token and pixel URL before it is sent.
 - The public bridge records the pixel hit and relays an `open` event to `onExternalEvent`.
 - First real opens update tracking fields and add one private note.
 - Repeated opens update counters and timeline data without note spam.
@@ -29,19 +30,18 @@ The public bridge owns:
 
 ## Important Limitation
 
-The app now supports two tracked reply paths:
+The app supports one primary v1 tracking entry point:
 
-- Sidebar tracked-send, where the app sends the reply itself.
-- Native Freshdesk conversation-editor assist, where the app inserts the tracking snippet into the open editor and the agent sends from Freshdesk normally.
+- Native Freshdesk reply send, where the app pauses the send click, prepares a tracking record, inserts the hidden pixel into the open editor, and resumes the send.
 
-The native editor flow is still intentionally explicit rather than silent. Freshworks documents editor insertion through the `ticket_conversation_editor` placeholder, but does not document a universal background hook that can silently mutate every outbound email composer.
+The sidebar is status-only in v1. The older app-owned compose fallback remains available as a server function for recovery/testing, but it is not exposed in the primary agent UI.
 
 ## Repo Surfaces
 
 - `app/sidebar.html` and `app/scripts/sidebar.js`
-  Ticket-level status plus tracked-send fallback flow.
+  Ticket-level tracking status, metrics, and timeline visibility.
 - `app/editor.html` and `app/scripts/editor.js`
-  Native Freshdesk conversation-editor helper for inserting tracking before an agent sends from Freshdesk.
+  Native reply-area send intercept that inserts tracking into the already-open Freshdesk editor.
 - `app/index.html` and `app/scripts/dashboard.js`
   Aggregate dashboard for tracked/read/unread/open totals and recent events.
 - `app/runtime.html` and `app/scripts/runtime.js`

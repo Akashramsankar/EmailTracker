@@ -1,0 +1,6 @@
+name = "email-tracker-bridge"
+main = "src/index.js"
+compatibility_date = "2026-06-23"
+
+[observability]
+enabled = true

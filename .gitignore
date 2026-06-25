@@ -1,0 +1,9 @@
+.DS_Store
+.fdk/
+.freddy-copilot-error.log
+.report.json
+coverage/
+dist/
+log/
+node_modules/
+external-email-tracker-bridge/.wrangler-home/

@@ -1,5 +1,8 @@
 {
   "platform-version": "3.0",
+  "dependencies": {
+    "jsrsasign": "11.1.3"
+  },
   "modules": {
     "common": {
       "requests": {
@@ -10,6 +13,7 @@
         "list_install_ticket_fields": {},
         "list_ticket_fields": {},
         "create_ticket_reply": {},
+        "bridge_create_ticket_reply": {},
         "add_ticket_note": {},
         "update_ticket": {}
       },
@@ -17,7 +21,8 @@
         "getTrackerDashboardData": {},
         "getTicketTrackerData": {},
         "sendTrackedReply": {},
-        "prepareConversationTracking": {},
+        "prepareNativeReplyTracking": {},
+        "logNativeReplyClientEvent": {},
         "syncLiveTicketFieldMetadata": {}
       },
       "events": {

@@ -1,7 +1,6 @@
 let client;
 let domainInput;
 let apiKeyInput;
-let bridgeSecretInput;
 let seenFieldSelect;
 let countFieldSelect;
 let ipBlacklistInput;
@@ -27,7 +26,6 @@ async function renderApp() {
 
     domainInput = document.getElementById("domain");
     apiKeyInput = document.getElementById("apiKey");
-    bridgeSecretInput = document.getElementById("bridgeSecret");
     seenFieldSelect = document.getElementById("seenField");
     countFieldSelect = document.getElementById("countField");
     ipBlacklistInput = document.getElementById("ipBlacklist");
@@ -38,7 +36,7 @@ async function renderApp() {
 
     btnVerify.addEventListener("click", verifyAndLoadFields);
 
-    [domainInput, apiKeyInput, bridgeSecretInput].forEach((input) => {
+    [domainInput, apiKeyInput].forEach((input) => {
       input.addEventListener("input", () => {
         verified = false;
       });
@@ -215,19 +213,15 @@ function showValidationMessage(message, type) {
 function postConfigs() {
   const newApiKey = apiKeyInput.value.trim();
   const isKeyUnchanged = savedConfigs.api_key && newApiKey === savedConfigs.api_key;
-  const newBridgeSecret = bridgeSecretInput.value.trim();
-  const isBridgeSecretUnchanged =
-    savedConfigs.bridge_secret && newBridgeSecret === savedConfigs.bridge_secret;
 
   return {
     __meta: {
-      secure: ["api_key", "bridge_secret"],
+      secure: ["api_key"],
     },
     domain: normalizeDomain(domainInput.value),
     api_key: isKeyUnchanged ? savedConfigs.api_key : getBasicAuth(newApiKey),
     seen_field: seenFieldSelect.value,
     count_field: countFieldSelect.value,
-    bridge_secret: isBridgeSecretUnchanged ? savedConfigs.bridge_secret : newBridgeSecret,
     ip_blacklist: ipBlacklistInput.value,
     note_on_first_open: noteOnFirstOpenInput.checked,
   };
@@ -237,7 +231,6 @@ function getConfigs(configs) {
   savedConfigs = configs || {};
   domainInput.value = configs.domain || "";
   apiKeyInput.value = configs.api_key || "";
-  bridgeSecretInput.value = configs.bridge_secret || "";
   ipBlacklistInput.value = configs.ip_blacklist || "";
   noteOnFirstOpenInput.checked = configs.note_on_first_open !== false;
 

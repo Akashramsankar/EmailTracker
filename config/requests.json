@@ -76,6 +76,16 @@
       }
     }
   },
+  "bridge_create_ticket_reply": {
+    "schema": {
+      "method": "POST",
+      "host": "<%= context.bridge_host %>",
+      "path": "<%= context.bridge_path %>",
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    }
+  },
   "add_ticket_note": {
     "schema": {
       "method": "POST",
