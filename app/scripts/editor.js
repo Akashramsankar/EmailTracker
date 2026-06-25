@@ -2,6 +2,7 @@ let client;
 const MAX_ATTACHMENTS = 5;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_TOTAL_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+const EDITOR_FRAME_HEIGHT = "520px";
 
 const state = {
   ticketId: 0,
@@ -11,6 +12,7 @@ const state = {
   loading: true,
   runtimeReady: false,
   senderOptions: [],
+  selectedAttachmentFiles: [],
   interceptRegistered: false,
   sending: false,
   lastHelperError: "",
@@ -24,10 +26,12 @@ async function init() {
     void logServerDiagnostic("editor_initialized", {
       location: "ticket_conversation_editor",
     });
+    resizeEditorFrame();
     bindEvents();
     registerSendReplyIntercept();
 
     client.events.on("app.activated", () => {
+      resizeEditorFrame();
       void logServerDiagnostic("editor_activated", {
         ticket_id: state.ticketId,
       });
@@ -49,7 +53,17 @@ function bindEvents() {
     void sendTrackedReplyFromEditor();
   });
 
-  document.getElementById("editorAttachments").addEventListener("change", renderAttachmentList);
+  document.getElementById("editorAttachments").addEventListener("change", () => {
+    addSelectedAttachments();
+    renderAttachmentList();
+    resizeEditorFrame();
+  });
+
+  document.getElementById("editorAttachmentList").addEventListener("click", (event) => {
+    if (event.target && event.target.matches("[data-remove-attachment]")) {
+      removeSelectedAttachment(Number(event.target.getAttribute("data-remove-attachment")));
+    }
+  });
 
   document.getElementById("refreshEditorBtn").addEventListener("click", () => {
     void logServerDiagnostic("editor_refresh_clicked", {
@@ -159,6 +173,7 @@ function render() {
   sendButton.textContent = state.sending ? "Sending..." : "Send Tracked Reply";
   renderSenderOptions();
   renderAttachmentList();
+  resizeEditorFrame();
 }
 
 function renderSenderOptions() {
@@ -173,8 +188,40 @@ function renderSenderOptions() {
 }
 
 function getSelectedFiles() {
+  return state.selectedAttachmentFiles.slice();
+}
+
+function addSelectedAttachments() {
   const input = document.getElementById("editorAttachments");
-  return Array.from(input && input.files ? input.files : []);
+  const files = Array.from(input && input.files ? input.files : []);
+  const nextFiles = state.selectedAttachmentFiles.concat(files);
+
+  try {
+    validateSelectedFiles(nextFiles);
+    state.selectedAttachmentFiles = nextFiles;
+  } catch (error) {
+    const message = resolveErrorMessage(error, "Invalid attachment selection.");
+    setStatus(message);
+    notify("error", message);
+  }
+
+  if (input) {
+    input.value = "";
+  }
+}
+
+function removeSelectedAttachment(index) {
+  if (state.sending) {
+    return;
+  }
+
+  if (Number.isNaN(index) || index < 0 || index >= state.selectedAttachmentFiles.length) {
+    return;
+  }
+
+  state.selectedAttachmentFiles.splice(index, 1);
+  renderAttachmentList();
+  resizeEditorFrame();
 }
 
 function formatFileSize(size) {
@@ -213,8 +260,14 @@ function renderAttachmentList() {
   const files = getSelectedFiles();
   try {
     validateSelectedFiles(files);
-    list.innerHTML = files.map((file) => {
-      return `<div>${escapeHtml(file.name)} (${escapeHtml(formatFileSize(file.size))})</div>`;
+    list.innerHTML = files.map((file, index) => {
+      const disabledAttribute = state.sending ? " disabled" : "";
+      return [
+        '<div class="attachment-row">',
+        `<span>${escapeHtml(file.name)} (${escapeHtml(formatFileSize(file.size))})</span>`,
+        `<button class="attachment-remove" type="button" data-remove-attachment="${index}"${disabledAttribute}>Remove</button>`,
+        "</div>",
+      ].join("");
     }).join("");
   } catch (error) {
     list.innerHTML = `<div>${escapeHtml(resolveErrorMessage(error, "Invalid attachment selection."))}</div>`;
@@ -283,7 +336,7 @@ async function sendTrackedReplyFromEditor() {
     }
 
     document.getElementById("editorReplyBody").value = "";
-    document.getElementById("editorAttachments").value = "";
+    state.selectedAttachmentFiles = [];
     renderAttachmentList();
     setStatus("Tracked reply sent.", true);
     notify("success", "Tracked reply sent.");
@@ -528,11 +581,26 @@ function parseInvokeResponse(result) {
 
 function resolveInvokeError(payload) {
   if (!payload) return "";
-  return payload.detail || payload.message || (payload.error && payload.error.message) || "";
+  if (payload.detail) {
+    return typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail);
+  }
+
+  if (payload.message) {
+    return typeof payload.message === "string" ? payload.message : JSON.stringify(payload.message);
+  }
+
+  if (payload.error) {
+    return typeof payload.error === "string"
+      ? payload.error
+      : payload.error.message || JSON.stringify(payload.error);
+  }
+
+  return "";
 }
 
 function resolveErrorMessage(error, fallback) {
   if (error && error.message) return error.message;
+  if (typeof error === "string") return error;
   return fallback;
 }
 
@@ -541,6 +609,20 @@ function notify(type, message) {
     type: type === "error" ? "danger" : type,
     message,
   });
+}
+
+function resizeEditorFrame() {
+  if (!client || !client.interface || typeof client.interface.trigger !== "function") {
+    return;
+  }
+
+  client.interface.trigger("resize", {
+    height: EDITOR_FRAME_HEIGHT,
+  }).catch(rememberResizeError);
+}
+
+function rememberResizeError(error) {
+  state.lastHelperError = resolveErrorMessage(error, "Unable to resize editor frame.");
 }
 
 function logServerDiagnostic(eventName, details) {

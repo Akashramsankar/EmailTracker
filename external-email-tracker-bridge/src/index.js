@@ -11,6 +11,13 @@ function normalizeUrl(value) {
   return normalizeText(value).replace(/\/+$/, "");
 }
 
+function normalizeFreshdeskDomain(value) {
+  return normalizeText(value)
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/.*$/, "")
+    .toLowerCase();
+}
+
 function parseUserAgent(userAgent) {
   const agent = normalizeText(userAgent).toLowerCase();
   if (!agent) {
@@ -53,7 +60,7 @@ function isValidUrl(value, { allowHttp = false } = {}) {
 }
 
 function isValidFreshdeskDomain(value) {
-  const domain = normalizeText(value).toLowerCase();
+  const domain = normalizeFreshdeskDomain(value);
   return /^[a-z0-9.-]+\.freshdesk\.com$/.test(domain);
 }
 
@@ -104,7 +111,7 @@ function buildFreshdeskReplyFormData(payload) {
 }
 
 async function sendFreshdeskReplyWithAttachments(payload) {
-  const domain = normalizeText(payload.domain).toLowerCase();
+  const domain = normalizeFreshdeskDomain(payload.domain);
   const apiKey = normalizeText(payload.api_key);
   const ticketId = Number(payload.ticket_id) || 0;
 

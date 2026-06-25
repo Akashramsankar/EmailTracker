@@ -25,14 +25,19 @@
       font-family: Arial, sans-serif;
       background: transparent;
       color: var(--ink);
+      overflow: visible;
     }
 
     .shell {
+      position: relative;
+      z-index: 2147483000;
       display: grid;
       gap: 8px;
       padding: 10px 12px;
       border-top: 1px solid var(--line);
       background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 252, 0.98));
+      box-shadow: 0 -8px 22px rgba(23, 50, 77, 0.10);
+      overflow: visible;
     }
 
     .topline {
@@ -137,6 +142,42 @@
 
     .attachment-list:empty {
       display: none;
+    }
+
+    .attachment-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .attachment-row span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .attachment-remove {
+      appearance: none;
+      border: 1px solid #f1b8b8;
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: #fff7f7;
+      color: #b42318;
+      cursor: pointer;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .attachment-remove:disabled {
+      opacity: 0.65;
+      cursor: default;
     }
   </style>
 </head>

@@ -60,6 +60,20 @@ function normalizeUrl(value) {
   return normalizeText(value).replace(/\/+$/, "");
 }
 
+function parseHttpsUrlParts(value) {
+  const normalized = normalizeText(value);
+  const match = normalized.match(/^(https):\/\/([^/?#]+)([^?#]*)?(?:[?#].*)?$/i);
+  if (!match) {
+    throw new Error("URL must be a valid https URL.");
+  }
+
+  return {
+    protocol: `${match[1].toLowerCase()}:`,
+    host: match[2],
+    pathname: match[3] || "/",
+  };
+}
+
 function normalizeBoolean(value, fallbackValue) {
   if (value === undefined || value === null || value === "") {
     return Boolean(fallbackValue);
@@ -171,6 +185,26 @@ function getErrorResponseBody(error) {
   return error && (error.response || error.responseText || error.body || "");
 }
 
+function summarizeErrorList(errors) {
+  if (!Array.isArray(errors)) {
+    return "";
+  }
+
+  return errors
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return normalizeText(item);
+      }
+      return normalizeText(
+        [item.field, item.message || item.description || item.code]
+          .filter(Boolean)
+          .join(": ")
+      );
+    })
+    .filter(Boolean)
+    .join("; ");
+}
+
 function buildErrorMessage(error, fallback) {
   if (!error) {
     return fallback || "Unknown error.";
@@ -192,7 +226,11 @@ function buildErrorMessage(error, fallback) {
       parts.push(
         parsed.description ||
           parsed.message ||
-          (Array.isArray(parsed.errors) ? parsed.errors.join("; ") : JSON.stringify(parsed))
+          (parsed.detail && typeof parsed.detail === "object" && (parsed.detail.message || parsed.detail.description)) ||
+          (parsed.detail && typeof parsed.detail === "string" && parsed.detail) ||
+          summarizeErrorList(parsed.errors) ||
+          (parsed.detail && typeof parsed.detail === "object" && summarizeErrorList(parsed.detail.errors)) ||
+          JSON.stringify(parsed)
       );
     } catch {
       parts.push(String(responseBody));
@@ -244,9 +282,17 @@ function resolveBridgeUrl(args) {
   );
 }
 
+function normalizeFreshdeskDomain(value) {
+  const normalized = normalizeText(value)
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/.*$/, "")
+    .toLowerCase();
+  return normalized;
+}
+
 function buildBridgeRequestContext(args, path) {
   const bridgeUrl = resolveBridgeUrl(args);
-  const parsed = new URL(bridgeUrl);
+  const parsed = parseHttpsUrlParts(bridgeUrl);
   return {
     bridge_host: parsed.host,
     bridge_path: `${parsed.pathname.replace(/\/+$/, "")}${path}`.replace(/^\/?/, "/"),
@@ -870,26 +916,57 @@ async function fetchReplySenderOptions() {
 
 async function sendReplyWithAttachmentsViaBridge(args, requestBody, attachments, ticketId) {
   const iparams = getIparams(args);
-  const domain = normalizeText(iparams.domain);
+  const domain = normalizeFreshdeskDomain(iparams.domain);
   const apiKey = normalizeText(iparams.api_key);
 
   if (!domain || !apiKey) {
     throw new Error("Freshdesk domain and API key are required for attachment replies.");
   }
 
-  return await invokeRequestTemplate("bridge_create_ticket_reply", {
-    context: buildBridgeRequestContext(args, "/freshdesk/reply"),
-    body: {
-      domain,
-      api_key: apiKey.startsWith("Basic ") ? apiKey : `Basic ${apiKey}`,
-      ticket_id: ticketId,
-      body: requestBody.body,
-      from_email: requestBody.from_email,
-      cc_emails: requestBody.cc_emails || [],
-      bcc_emails: requestBody.bcc_emails || [],
-      attachments,
-    },
+  const context = buildBridgeRequestContext(args, "/freshdesk/reply");
+  debugLog("tracked_reply_attachment_bridge_send_started", {
+    ticket_id: ticketId,
+    bridge_host: context.bridge_host,
+    bridge_path: context.bridge_path,
+    attachment_count: attachments.length,
+    attachment_bytes: attachments.reduce((total, attachment) => total + (Number(attachment.size) || 0), 0),
   });
+
+  try {
+    const response = await invokeRequestTemplate("bridge_create_ticket_reply", {
+      context,
+      body: {
+        domain,
+        api_key: apiKey.startsWith("Basic ") ? apiKey : `Basic ${apiKey}`,
+        ticket_id: ticketId,
+        body: requestBody.body,
+        from_email: requestBody.from_email,
+        cc_emails: requestBody.cc_emails || [],
+        bcc_emails: requestBody.bcc_emails || [],
+        attachments,
+      },
+    });
+    if (response && response.success === false) {
+      const error = new Error(normalizeText(response.detail || response.message) || "Attachment bridge request failed.");
+      error.status = Number(response.status) || 502;
+      error.response = response;
+      throw error;
+    }
+
+    debugLog("tracked_reply_attachment_bridge_send_completed", {
+      ticket_id: ticketId,
+      response_id: response && response.id ? response.id : 0,
+      attachment_count: attachments.length,
+    });
+    return response;
+  } catch (error) {
+    debugLog("tracked_reply_attachment_bridge_send_failed", {
+      ticket_id: ticketId,
+      status: Number(error && error.status) || 0,
+      error: buildErrorMessage(error, "Attachment bridge request failed."),
+    });
+    throw error;
+  }
 }
 
 async function fetchTicketFieldDefinitions() {
@@ -1293,7 +1370,7 @@ function validateAppSettings(args) {
   if (bridgePublicUrl) {
     let parsedUrl;
     try {
-      parsedUrl = new URL(bridgePublicUrl);
+      parsedUrl = parseHttpsUrlParts(bridgePublicUrl);
     } catch {
       throw new Error("bridge_public_url must be a valid https URL.");
     }
@@ -1510,6 +1587,11 @@ function shouldRetryWithoutSender(error, senderEmail) {
     detail.includes("validation failed");
 }
 
+function isUnsupportedGenerateTargetUrlError(error) {
+  return normalizeLower(buildErrorMessage(error, ""))
+    .includes("generatetargeturl method cannot be used");
+}
+
 async function initializeRuntimeConfig(args, options) {
   const currentConfig = await readRuntimeConfig();
   const nextConfig = {
@@ -1520,7 +1602,25 @@ async function initializeRuntimeConfig(args, options) {
   let changed = false;
 
   if (allowGenerate && (forceRefresh || !normalizeText(nextConfig.external_hook_url))) {
-    nextConfig.external_hook_url = await generateTargetUrl(EVENT_HOOK_OPTION);
+    try {
+      nextConfig.external_hook_url = await generateTargetUrl(EVENT_HOOK_OPTION);
+      debugLog("runtime_hook_generated", {
+        force_refresh: forceRefresh,
+        had_existing_hook: Boolean(normalizeText(currentConfig && currentConfig.external_hook_url)),
+      });
+    } catch (error) {
+      debugLog("runtime_hook_generate_failed", {
+        force_refresh: forceRefresh,
+        error: buildErrorMessage(error, "Unable to generate external event hook URL."),
+      });
+      if (!forceRefresh && isUnsupportedGenerateTargetUrlError(error)) {
+        debugLog("runtime_hook_generate_unsupported_ignored", {
+          has_existing_hook: Boolean(normalizeText(nextConfig.external_hook_url)),
+        });
+        return nextConfig;
+      }
+      throw error;
+    }
     nextConfig.external_hook_generated_at = Date.now();
     changed = true;
   }
@@ -1686,7 +1786,7 @@ exports = {
       });
 
       if (!normalizeText(runtimeConfig.external_hook_url)) {
-        throw new Error("The tracking hook URL is not initialized yet. Refresh the ticket and try again.");
+        throw new Error("The tracking hook URL is not initialized yet. Reinstall or update the app so Freshworks can initialize the external event hook.");
       }
 
       const ticket = payload.native_send
@@ -1830,7 +1930,7 @@ exports = {
       });
 
       if (!normalizeText(runtimeConfig.external_hook_url)) {
-        throw new Error("The tracking hook URL is not initialized yet. Refresh the ticket and try again.");
+        throw new Error("The tracking hook URL is not initialized yet. Reinstall or update the app so Freshworks can initialize the external event hook.");
       }
 
       const ticket = {
