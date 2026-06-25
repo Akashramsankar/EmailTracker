@@ -1,15 +1,17 @@
 let client;
 
+const EMPTY_SUMMARY = {
+  tracked_count: 0,
+  read_count: 0,
+  unread_count: 0,
+  total_open_count: 0,
+  blacklisted_open_count: 0,
+};
+
 const state = {
   ticketId: 0,
   loading: true,
-  summary: {
-    tracked_count: 0,
-    read_count: 0,
-    unread_count: 0,
-    total_open_count: 0,
-    blacklisted_open_count: 0,
-  },
+  summary: { ...EMPTY_SUMMARY },
 };
 
 document.addEventListener("DOMContentLoaded", init);
@@ -55,7 +57,7 @@ async function loadSidebar(silent) {
       throw new Error(resolveInvokeError(payload) || "Unable to load ticket tracker data.");
     }
 
-    state.summary = payload.summary || state.summary;
+    state.summary = normalizeSummary(payload.summary);
   } catch (error) {
     console.error("Unable to load ticket tracker data:", error);
     notify("error", resolveErrorMessage(error, "Unable to load ticket tracker data."));
@@ -63,6 +65,16 @@ async function loadSidebar(silent) {
     state.loading = false;
     render();
   }
+}
+
+function normalizeSummary(summary) {
+  return {
+    tracked_count: Number(summary && summary.tracked_count) || 0,
+    read_count: Number(summary && summary.read_count) || 0,
+    unread_count: Number(summary && summary.unread_count) || 0,
+    total_open_count: Number(summary && summary.total_open_count) || 0,
+    blacklisted_open_count: Number(summary && summary.blacklisted_open_count) || 0,
+  };
 }
 
 function render() {

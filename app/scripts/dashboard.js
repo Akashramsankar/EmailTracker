@@ -1,14 +1,16 @@
 let client;
 
+const EMPTY_METRICS = {
+  tracked: 0,
+  read: 0,
+  unread: 0,
+  opens: 0,
+  blacklisted: 0,
+};
+
 let state = {
   loading: true,
-  metrics: {
-    tracked: 0,
-    read: 0,
-    unread: 0,
-    opens: 0,
-    blacklisted: 0,
-  },
+  metrics: { ...EMPTY_METRICS },
   tickets: [],
   recentEvents: [],
   runtime: {
@@ -71,7 +73,7 @@ async function loadDashboard(silent) {
       throw new Error(resolveInvokeError(payload) || "Unable to load dashboard data.");
     }
 
-    state.metrics = payload.metrics || state.metrics;
+    state.metrics = normalizeMetrics(payload.metrics);
     state.tickets = Array.isArray(payload.tickets) ? payload.tickets : [];
     state.recentEvents = Array.isArray(payload.recent_events) ? payload.recent_events : [];
     state.runtime = payload.runtime || state.runtime;
@@ -85,6 +87,16 @@ async function loadDashboard(silent) {
     renderTickets();
     renderEvents();
   }
+}
+
+function normalizeMetrics(metrics) {
+  return {
+    tracked: Number(metrics && metrics.tracked) || 0,
+    read: Number(metrics && metrics.read) || 0,
+    unread: Number(metrics && metrics.unread) || 0,
+    opens: Number(metrics && metrics.opens) || 0,
+    blacklisted: Number(metrics && metrics.blacklisted) || 0,
+  };
 }
 
 function renderMetrics() {

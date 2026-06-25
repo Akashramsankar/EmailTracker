@@ -1536,6 +1536,41 @@ function buildDashboardPayload(messages) {
   };
 }
 
+function buildTrackingSnapshot(messages) {
+  const trackedMessages = Array.isArray(messages) ? messages : [];
+  return {
+    source_of_truth: MESSAGES_KEY,
+    total_records: trackedMessages.length,
+    messages: trackedMessages,
+    dashboard: buildDashboardPayload(trackedMessages),
+  };
+}
+
+async function readTrackingSnapshot(context) {
+  const messages = await readTrackedMessages();
+  const repaired = repairNativePendingSelfOpenCounters(messages);
+  if (repaired) {
+    await writeTrackedMessages(messages);
+    debugLog("native_pending_self_open_counters_repaired_on_snapshot_load", {
+      context: normalizeText(context),
+      total_records: messages.length,
+    });
+  }
+  const snapshot = buildTrackingSnapshot(messages);
+  debugLog("tracking_snapshot_loaded", {
+    context: normalizeText(context),
+    source_of_truth: snapshot.source_of_truth,
+    total_records: snapshot.total_records,
+  });
+  return snapshot;
+}
+
+function getTicketMessagesFromSnapshot(snapshot, ticketId) {
+  return (Array.isArray(snapshot && snapshot.messages) ? snapshot.messages : [])
+    .filter((message) => Number(message.ticket_id) === Number(ticketId))
+    .sort((left, right) => Number(right.created_at || 0) - Number(left.created_at || 0));
+}
+
 function getMessagePreview(message) {
   return truncate(message.body_preview || message.reply_subject || message.ticket_subject || "", 140);
 }
@@ -1690,16 +1725,12 @@ exports = {
       const runtimeConfig = await initializeRuntimeConfig(args, {
         allowGenerate: false,
       });
-      const messages = await readTrackedMessages();
-      if (repairNativePendingSelfOpenCounters(messages)) {
-        await writeTrackedMessages(messages);
-        debugLog("native_pending_self_open_counters_repaired_on_dashboard_load", {
-          total_records: messages.length,
-        });
-      }
-      const dashboard = buildDashboardPayload(messages);
+      const snapshot = await readTrackingSnapshot("dashboard");
+      const dashboard = snapshot.dashboard;
       return buildResponse({
         success: true,
+        source_of_truth: snapshot.source_of_truth,
+        total_records: snapshot.total_records,
         ...dashboard,
         runtime: {
           bridge_public_url: normalizeUrl(runtimeConfig.bridge_public_url),
@@ -1722,28 +1753,20 @@ exports = {
       const runtimeConfig = await initializeRuntimeConfig(args, {
         allowGenerate: false,
       });
-      const [ticket, senderOptions, messages] = await Promise.all([
+      const [ticket, senderOptions, snapshot] = await Promise.all([
         fetchTicket(ticketId),
         fetchReplySenderOptions(),
-        readTrackedMessages(),
+        readTrackingSnapshot("ticket"),
       ]);
-      if (repairNativePendingSelfOpenCounters(messages)) {
-        await writeTrackedMessages(messages);
-        debugLog("native_pending_self_open_counters_repaired_on_sidebar_load", {
-          ticket_id: ticketId,
-          total_records: messages.length,
-        });
-      }
 
       const requesterInfo = getRequesterInfo(ticket);
-      const ticketMessages = messages
-        .filter((message) => Number(message.ticket_id) === ticketId)
-        .sort((left, right) => Number(right.created_at || 0) - Number(left.created_at || 0));
+      const ticketMessages = getTicketMessagesFromSnapshot(snapshot, ticketId);
 
       const ticketSummary = buildTicketSummary(ticketId, ticketMessages);
       debugLog("sidebar_ticket_data_loaded", {
         ticket_id: ticketId,
-        total_records: messages.length,
+        source_of_truth: snapshot.source_of_truth,
+        total_records: snapshot.total_records,
         ticket_records: ticketMessages.length,
         pending_records: ticketMessages.filter((message) => message && message.native_pending).length,
         runtime_hook_present: Boolean(normalizeText(runtimeConfig.external_hook_url)),
@@ -1751,6 +1774,8 @@ exports = {
 
       return buildResponse({
         success: true,
+        source_of_truth: snapshot.source_of_truth,
+        total_records: snapshot.total_records,
         ticket: {
           id: ticketId,
           subject: normalizeText(ticket && ticket.subject),
